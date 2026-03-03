@@ -23,14 +23,48 @@
 
 # Librerias e importaciones
 import argparse # Para parsear argumentos de linea de comandos
-#import requests # Para realizar peticiones HTTP
+import requests # Para realizar peticiones HTTP
 
-# Pruebas
-def main():
+def parsear_argumentos():
     parser = argparse.ArgumentParser(description="Escaner de XSS automatizado")
     parser.add_argument("--url", required=True, help="URL objetivo")
     args = parser.parse_args()
-    print(args.url)
+    return args.url
+
+def crear_sesion():
+    session = requests.Session()
+    return session
+
+def peticion_pagina(url, session):
+    try:
+        response = session.get(url)
+        print("Peticion GET realizada con exito")
+        print("Codigo de estado:", response.status_code)
+        if response.status_code != 200:
+            return None
+        
+        return response
+    except requests.RequestException as e:
+        print("\nAlgo ha fallado al realizar la peticion\nError:", e)
+        return None
+
+# Pruebas
+def main():
+    # Primeros pasos
+    # Parsear argumentos de linea de comandos
+    url = parsear_argumentos()
+    print("Analizando :", url + "...\n")
+    # Crear una sesion de requests para mantener cookies y cabeceras
+    session = crear_sesion()
+
+    # Hacer peticion GET de la pagina objetivo para obtener el contenido inicial
+    response = peticion_pagina(url, session)
+    if response is None:
+        print("\nNo se pudo obtener la pagina objetivo.\nSaliendo...")
+        return
+    
+    # Aqui ira un menu switch con las siguientes acciones que puede tomar el usuario
+    return 0
 
 if __name__ == "__main__":
     main()

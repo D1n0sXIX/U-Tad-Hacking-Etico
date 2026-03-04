@@ -24,6 +24,8 @@
 # Librerias e importaciones
 import argparse # Para parsear argumentos de linea de comandos
 import requests # Para realizar peticiones HTTP
+from modules import DetectorParametrosGet
+from modules import Outputs
 
 def parsear_argumentos():
     parser = argparse.ArgumentParser(description="Escaner de XSS automatizado")
@@ -62,8 +64,17 @@ def main():
     if response is None:
         print("\nNo se pudo obtener la pagina objetivo.\nSaliendo...")
         return
+
+    # [1] Descubrimiento GET
+    parametros_get = DetectorParametrosGet.parsear_parametros_URL(response)
+    Outputs.mostrar_resultados_parametros_get(parametros_get)
     
-    # Aqui ira un menu switch con las siguientes acciones que puede tomar el usuario
+    # [2] Descubrimiento POST
+    # [3] Reflexion
+    # [4] Persistencia
+    # [5] Contexto
+    # [6] Filtros
+    # [7] Evasion  
     return 0
 
 if __name__ == "__main__":

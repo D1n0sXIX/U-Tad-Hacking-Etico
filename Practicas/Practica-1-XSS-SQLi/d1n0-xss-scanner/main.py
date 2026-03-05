@@ -8,7 +8,7 @@
 # [2] Reflexión --> Envio de texto unico por cada entrada y comprobacion de si se refleja la respuesta
 #  - VerificacionDeReflexion.py
 # [3] Persistencia --> tras inyectar el codigo, realizar segunda peticion limpia para ver si la entrada persiste
-#  - VerificacionDePersistencia.py
+#  - VerificacionDeReflexion.py
 # [4] Contexto --> Determina DONDE se regleja el texto introducido, para adaptar el payload al contexto real
 # - AnalisisDeContexto.py
 # [5] Filtros --> identifica caracteres bloqueados/codificados y palabras prohibidas
@@ -28,6 +28,7 @@ import requests # Para realizar peticiones HTTP
 from modulos import DetectorParametrosGet
 from modulos import DetectorParametrosPost
 from modulos import VerificacionDeReflexion
+from modulos import AnalisisDeContexto
 from modulos import Outputs
 from time import sleep
 
@@ -100,16 +101,17 @@ def main():
     Outputs.mostrar_resultados_parametros_post(parametros_post) # Muestra los formularios
     Outputs.separador()
     sleep(1)
-    # [3] Reflexion
+    # [3] Reflexion [4] Persistencia y [5] Contexto
     if not parametros_get_URL and not parametros_get_HTML and not parametros_post:
         print("No se han encontrado parametros\nNo se puede hacer XSS")
         return
     
     print("Verificando reflexion de parametros GET y POST...")
+    # primero verificamos la reflexion de los parametros GET encontrados en la URL, luego los del HTML y por ultimo los POST, para evitar hacer peticiones innecesarias a la pagina objetivo
     parametros_reflejados = VerificacionDeReflexion.verificar_reflexion(url, parametros_get_URL, parametros_get_HTML, parametros_post, session)
-    Outputs.mostrar_resultados_reflexion(parametros_reflejados) # Muestra los parametros reflejados encontrados
-    # [4] Persistencia
-    # [5] Contexto
+    # Despues analizamos el contexto de cada parametro reflejado para adaptar los payloads a corde
+    parametros_reflejados = AnalisisDeContexto.analizar_contexto(parametros_reflejados, session) # Analiza el contexto de cada parametro reflejado
+    Outputs.mostrar_resultados_analisis(parametros_reflejados) # Muestra los parametros reflejados encontrados
     # [6] Filtros
     # [7] Evasion
 

@@ -32,7 +32,7 @@ def mostrar_resultados_parametros_post(parametros):
         for campo, valor in formulario['campos'].items():
             print(f"     - {campo} = {valor}")
 
-def mostrar_resultados_reflexion(parametros_reflejados):
+def mostrar_resultados_analisis(parametros_reflejados):
     if not parametros_reflejados:
         print("No se han reflejado parametros GET o POST en la respuesta.")
         return
@@ -43,3 +43,6 @@ def mostrar_resultados_reflexion(parametros_reflejados):
         print(f"   Etiqueta: {reflejado['etiqueta']}")
         print(f"   Parametro: {reflejado['parametro']}")
         print(f"   Token: {reflejado['token']}")
+        print(f"   Tienen persistencia: {'Si' if reflejado['persistente'] else 'No'}")
+        print(f"   Contexto: {reflejado['contexto']}")
+        print(f"   Tipo de XSS: {reflejado['tipo_xss']}")

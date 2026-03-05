@@ -12,20 +12,24 @@ def crear_token_unico():
 
 #Verificamos si se reflejan los parametros GET en la URL
 def verificar_parametros_url(url, parametros_get_URL, token, session):
-    # Creamos una lista para almacenar los parametros reflejados
+    # Creamos lista con todos los parametros reflejados 
     reflejados = []
-    # iteramos sobre los parametros GET encontrados en de la URL
+    # Iteramos sobre los parametros GET encontrados en la URL
     for parametro in parametros_get_URL:
-        # Guardamos la respuesta
+        # Peticion con el token inyectado
         response = session.get(url, params={parametro: token})
-        # Comprobamos que este reflejada
         if token in response.text:
-            # Si lo esta la guardamos en la lista de reflejados con su tipo, etiqueta y parametro
+            # El token se refleja, ahora comprobamos si persiste
+            # Hacemos una segunda peticion LIMPIA sin inyectar nada
+            response_limpia = session.get(url)
+            # Si el token sigue apareciendo sin haberlo enviado --> Stored XSS
+            persistente = token in response_limpia.text
             reflejados.append({
                 "tipo": "GET_URL",
                 "etiqueta": url,
                 "parametro": parametro,
-                "token": token
+                "token": token,
+                "persistente": persistente
             })
     return reflejados
 # Funcion que verifica si se reflejan los parametros GET encontrados en el HTML
@@ -41,11 +45,14 @@ def verificar_parametros_html(parametros_get_HTML, token, session):
             response = session.get(href, params={parametro: token})
             # Si el token se refleja en la respuesta, lo guardamos en la lista de reflejados con su tipo, etiqueta y parametro
             if token in response.text:
+                response_limpia = session.get(href)
+                persistente = token in response_limpia.text
                 reflejados.append({
                     "tipo": "GET_HTML",
                     "etiqueta": href,
                     "parametro": parametro,
-                    "token": token
+                    "token": token,
+                    "persistente": persistente
                 })
     return reflejados
 
@@ -54,19 +61,23 @@ def verificar_parametros_post(url, parametros_post, token, session):
     reflejados = []
     # Iteramos sobre los formularios POST encontrados en la pagina
     for formulario in parametros_post:
-        # MUY IMPORTANTE - Para hacer la peticion POST, necesitamos la URL del formulario, que se obtiene a partir de la URL de la pagina y el action del formulario
-        url_base = url.rsplit('/', 1)[0]
-        url_post = url_base + '/' + formulario["action"]
-        # Por cada campo del formulario, hacemos una peticion POST con el token inyectado y comprobamos si se refleja en la respuesta
+        if formulario["action"].startswith("/"):
+            url_post = url.split("/")[0] + "//" + url.split("/")[2] + formulario["action"]
+        else:
+            url_base = url.rsplit('/', 1)[0]
+            url_post = url_base + '/' + formulario["action"]
+        
         for campo in formulario["campos"]:
             response = session.post(url_post, data={campo: token})
-            # Si el token se refleja en la respuesta, lo guardamos en la lista de reflejados con su tipo, etiqueta y parametro
             if token in response.text:
+                response_limpia = session.post(url_post)
+                persistente = token in response_limpia.text
                 reflejados.append({
                     "tipo": "POST",
                     "etiqueta": url_post,
                     "parametro": campo,
-                    "token": token
+                    "token": token,
+                    "persistente": persistente
                 })
     return reflejados
 

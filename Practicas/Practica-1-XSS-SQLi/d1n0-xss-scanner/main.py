@@ -24,8 +24,14 @@
 # Librerias e importaciones
 import argparse # Para parsear argumentos de linea de comandos
 import requests # Para realizar peticiones HTTP
-from modules import DetectorParametrosGet
-from modules import Outputs
+
+from modulos import DetectorParametrosGet
+from modulos import DetectorParametrosPost
+from modulos import VerificacionDeReflexion
+from modulos import Outputs
+from time import sleep
+
+
 
 def parsear_argumentos():
     parser = argparse.ArgumentParser(description="Escaner de XSS automatizado")
@@ -52,10 +58,18 @@ def peticion_pagina(url, session):
 
 # Pruebas
 def main():
+    Outputs.separador()
+    print("D1n0 XSS Scanner - XSS tester")
+    # Creamos un diccionario apra almacenan Los tipos de XSS que podemos realizar
+    tipos_xss = {"reflected": False, "stored": False,"dom": False}
+    
     # Primeros pasos
     # Parsear argumentos de linea de comandos
     url = parsear_argumentos()
-    print("Analizando :", url + "...\n")
+    print("Analizando :* " + url + " *")
+    Outputs.separador()
+    sleep(1) # Pausa de 1 segundo para mejorar la legibilidad
+
     # Crear una sesion de requests para mantener cookies y cabeceras
     session = crear_sesion()
 
@@ -65,16 +79,42 @@ def main():
         print("\nNo se pudo obtener la pagina objetivo.\nSaliendo...")
         return
 
+    Outputs.separador()
     # [1] Descubrimiento GET
-    parametros_get = DetectorParametrosGet.parsear_parametros_URL(response)
-    Outputs.mostrar_resultados_parametros_get(parametros_get)
+    print("Analizando parametros GET...")
+    parametros_get_URL, parametros_get_HTML = DetectorParametrosGet.obtener_Parametros_GET(response)
+    Outputs.separador()
+    sleep(1)
+    if not parametros_get_URL and not parametros_get_HTML:
+        print("No se han encontrado parametros GET")
+    else:
+        print("Resultados de parametros GET:")
+        Outputs.mostrar_resultados_parametros_get_URL(parametros_get_URL) # Muestra los parametros GET encontrados en la URL
+        Outputs.mostrar_resultados_parametros_get_HTML(parametros_get_HTML) # Muestra los enlaces con parametros GET encontrados en el HTML
     
+    Outputs.separador()
+    sleep(1)
+
     # [2] Descubrimiento POST
+    parametros_post = DetectorParametrosPost.obtener_parametros_POST(response) # Devuelve una lista de diccionarios con los formularios POST encontrados
+    Outputs.mostrar_resultados_parametros_post(parametros_post) # Muestra los formularios
+    Outputs.separador()
+    sleep(1)
     # [3] Reflexion
+    if not parametros_get_URL and not parametros_get_HTML and not parametros_post:
+        print("No se han encontrado parametros\nNo se puede hacer XSS")
+        return
+    
+    print("Verificando reflexion de parametros GET y POST...")
+    parametros_reflejados = VerificacionDeReflexion.verificar_reflexion(url, parametros_get_URL, parametros_get_HTML, parametros_post, session)
+    Outputs.mostrar_resultados_reflexion(parametros_reflejados) # Muestra los parametros reflejados encontrados
     # [4] Persistencia
     # [5] Contexto
     # [6] Filtros
-    # [7] Evasion  
+    # [7] Evasion
+
+    Outputs.separador()
+    print("Fin del analisis")
     return 0
 
 if __name__ == "__main__":

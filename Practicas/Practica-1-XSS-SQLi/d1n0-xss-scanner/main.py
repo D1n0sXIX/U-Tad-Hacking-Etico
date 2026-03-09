@@ -29,6 +29,9 @@ from modulos import DetectorParametrosGet
 from modulos import DetectorParametrosPost
 from modulos import VerificacionDeReflexion
 from modulos import AnalisisDeContexto
+from modulos import DeteccionDeFiltros
+from modulos import TecnicasDeEvasion
+from modulos import GeneracionDePayloads
 from modulos import Outputs
 from time import sleep
 
@@ -112,8 +115,25 @@ def main():
     # Despues analizamos el contexto de cada parametro reflejado para adaptar los payloads a corde
     parametros_reflejados = AnalisisDeContexto.analizar_contexto(parametros_reflejados, session) # Analiza el contexto de cada parametro reflejado
     Outputs.mostrar_resultados_analisis(parametros_reflejados) # Muestra los parametros reflejados encontrados
+    Outputs.separador()
+    sleep(1)
     # [6] Filtros
-    # [7] Evasion
+    # primero detectamos que filtros estan activos
+    parametros_reflejados = DeteccionDeFiltros.detectar_filtros(session, parametros_reflejados)
+    # luego mostramos los filtros encontrados
+    Outputs.mostrar_filtros_encontrados(parametros_reflejados)
+    Outputs.separador()
+    sleep(1)
+
+    # [7] Evasion y payloads
+    parametros_reflejados = TecnicasDeEvasion.generar_payloads(parametros_reflejados)
+    Outputs.mostrar_payloads_candidatos(parametros_reflejados)
+    Outputs.separador()
+    sleep(1)
+
+    # [8] Output final
+    parametros_reflejados = GeneracionDePayloads.generar_payloads(parametros_reflejados, session)
+    Outputs.mostrar_payloads_exitosos(parametros_reflejados)
 
     Outputs.separador()
     print("Fin del analisis")

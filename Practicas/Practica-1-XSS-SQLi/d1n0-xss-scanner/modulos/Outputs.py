@@ -46,3 +46,35 @@ def mostrar_resultados_analisis(parametros_reflejados):
         print(f"   Tienen persistencia: {'Si' if reflejado['persistente'] else 'No'}")
         print(f"   Contexto: {reflejado['contexto']}")
         print(f"   Tipo de XSS: {reflejado['tipo_xss']}")
+
+def mostrar_filtros_encontrados(parametros_reflejados):
+    print("Filtros encontrados en los parametros reflejados:")
+    for reflejado in parametros_reflejados:
+        print(f" - Parametro: {reflejado['parametro']} ({reflejado['tipo']})")
+        print("   Filtros:")
+        for filtro, resultado in reflejado["filtros"].items():
+            if resultado != "aceptado":
+                print(f"     - {filtro}: {resultado}")
+
+def mostrar_payloads_candidatos(parametros_reflejados):
+    print("Posibles payloads candidatos para cada parametro reflejado:")
+    for reflejado in parametros_reflejados:
+        print(f" - Parametro: {reflejado['parametro']} ({reflejado['tipo']})")
+        print("   Payloads candidatos:")
+        for payload in reflejado.get("payloads_candidatos", []):
+            print(f"     - {payload}")
+
+def mostrar_payloads_exitosos(parametros_reflejados):
+    for reflejado in parametros_reflejados:
+        print(f" - Parametro: {reflejado['parametro']} ({reflejado['tipo']})")
+        exitosos = reflejado.get("payloads_exitosos", [])
+        candidatos = reflejado.get("payloads_candidatos", [])
+        
+        if not candidatos:
+            print("   No hay payloads candidatos - actualiza wordlists/payloads.txt")
+        elif not exitosos:
+            print("   Ningún payload se reflejó sin modificar - prueba a actualizar wordlists/payloads.txt")
+        else:
+            print("   Payloads exitosos:")
+            for payload in exitosos:
+                print(f"     - {payload}")

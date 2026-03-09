@@ -12,6 +12,7 @@
 #
 `
 script
+<script>
 alert
 onerror
 onload

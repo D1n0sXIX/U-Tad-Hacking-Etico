@@ -2,7 +2,8 @@ from bs4 import BeautifulSoup
 
 # Modulo que detecta y separa los parametros GET de una URL
 # booleano que indica si hay parametros GET en la URL
-def hay_parametros_GET(url):
+# Habria que  añadir el aprametro token y hacer un if toekn in url no?
+def hay_parametros_GET(url): 
     # Comprobamos si la URL contiene un "?" que indica el inicio de los parametros GET
     if "?" in url:
         return True
@@ -31,7 +32,7 @@ def separar_parametros_URL(url):
 
 def sacar_parametros_html(response):
     soup = BeautifulSoup(response.text, 'html.parser')
-    enlaces = soup.find_all('a')
+    enlaces = soup.find_all('a') # Buscamos todos los enlaces en el HTML, ya que los parametros GET suelen estar en los enlaces, aunque tambien pueden estar en otros elementos como formularios, pero eso lo veremos en el modulo de POST
     enlaces_con_parametros = []  # ← lista que devolverás
     
     for enlace in enlaces:

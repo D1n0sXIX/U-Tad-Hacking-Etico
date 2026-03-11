@@ -83,13 +83,7 @@ d1n0-xss-scanner/
 
 ---
 
-## Comentarios del autor
-
-Actualmente estimo que el programa funciona a un **~65%** de fiabilidad. La arquitectura y el flujo de detección están bien definidos, pero me faltan más entornos de prueba para pulir casos edge, mejorar la precisión del análisis de contexto y ampliar las wordlists. Con más testing en entornos variados el porcentaje debería subir considerablemente.
-
----
-
-## Posibles mejoras futuras
+## Mejoras futuras para cuando tenga tiempo
 
 - **Flag `--delay`** → Añadir pausa entre peticiones para no saturar el servidor objetivo
 - **Flag `--domain-only`** → Filtrar enlaces HTML externos al dominio objetivo para evitar falsos positivos

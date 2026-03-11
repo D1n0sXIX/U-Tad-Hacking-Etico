@@ -132,6 +132,7 @@ def main():
     sleep(1)
 
     # [8] Output final
+    print("Probando Payloads candidatos...")
     parametros_reflejados = GeneracionDePayloads.generar_payloads(parametros_reflejados, session)
     Outputs.mostrar_payloads_exitosos(parametros_reflejados)
 

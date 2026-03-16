@@ -1,6 +1,6 @@
 ================================================================================
-                    JOHN THE RIPPER / HASHCAT - CHEATSHEET
-		    Autor: D1n0
+JOHN THE RIPPER / HASHCAT - CHEATSHEET
+Autor: D1n0
 ================================================================================
 
 --- IDENTIFICAR EL TIPO DE HASH ---

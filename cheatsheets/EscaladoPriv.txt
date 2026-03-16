@@ -1,6 +1,6 @@
 ================================================================================
-                  PRIVILEGE ESCALATION LINUX - CHEATSHEET
-                  Autor: D1n0
+PRIVILEGE ESCALATION LINUX - CHEATSHEET
+Autor: D1n0
 ================================================================================
 
 --- ENUMERACIÓN INICIAL ---

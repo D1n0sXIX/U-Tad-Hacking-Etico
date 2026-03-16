@@ -7,5 +7,5 @@ def dependencies():
 	pass
 def tamper(payload, **kwargs):
 	if payload:
-		payload = payload + "and 1=1"
+		payload = payload + " and 1=1"
 	return payload

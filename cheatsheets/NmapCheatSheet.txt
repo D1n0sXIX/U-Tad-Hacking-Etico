@@ -1,0 +1,85 @@
+================================================================================
+                        NMAP - CHEATSHEET
+			Autor: D1n0
+================================================================================
+
+SINTAXIS BASE:
+  nmap [flags] <IP/rango>
+
+FLAGS - DESCUBRIMIENTO DE HOSTS:
+  -sn               : ping scan (solo hosts, sin puertos)
+  -Pn               : saltar ICMP echo requests
+  -n                : desactivar resolución DNS
+  -PE               : ping usando ICMP Echo Requests
+  --disable-arp-ping: desactivar ARP ping requests
+
+FLAGS - ESCANEO DE PUERTOS:
+  -sS               : TCP SYN scan (stealth, requiere root)
+  -sT               : TCP connect scan (sin root)
+  -sA               : TCP ACK scan (ver si hay firewall)
+  -sU               : UDP scan
+  -p <n>            : puertos concretos  ej: -p 22,80  /  -p 22-110  /  -p-
+  -F                : top 100 puertos
+  --top-ports <n>   : top N puertos más comunes
+
+FLAGS - DETECCIÓN:
+  -sV               : versión de servicios
+  -sC               : scripts NSE por defecto
+  -O                : detectar sistema operativo
+  -A                : todo (-sV -sC -O + traceroute)
+  --script <nombre> : ejecutar script NSE concreto
+
+FLAGS - EVASIÓN:
+  -D RND:<n>        : usar N decoys aleatorios  ej: -D RND:5
+  -S <IP>           : spoof IP origen
+  -e <iface>        : especificar interfaz de red
+  -g <puerto>       : especificar puerto origen
+  --dns-server <ns> : usar DNS server concreto para resolución
+
+FLAGS - OUTPUT:
+  -oN <file>        : guardar en formato normal
+  -oG <file>        : guardar en formato grepable
+  -oX <file>        : guardar en XML
+  -oA <file>        : guardar en todos los formatos
+
+FLAGS - RENDIMIENTO:
+  -T<0-5>           : timing (T3=default, T4=rápido, T0=stealth)
+  --min-rate <n>    : paquetes enviados simultáneamente  ej: --min-rate 300
+  --max-retries <n> : reintentos por puerto
+  --initial-rtt-timeout <ms> : RTT timeout inicial
+  --max-rtt-timeout <ms>     : RTT timeout máximo
+  --stats-every <t> : mostrar estado cada X tiempo  ej: --stats-every=5s
+
+FLAGS - DEBUG:
+  -v / -vv          : verbose
+  --packet-trace    : mostrar todos los paquetes enviados/recibidos
+  --reason          : mostrar razón del resultado de cada puerto
+
+SCRIPTS NSE ÚTILES:
+  --script=vuln                : vulnerabilidades generales
+  --script=http-enum           : enumerar rutas web
+  --script=smb-vuln-ms17-010   : EternalBlue
+  --script=ftp-anon            : login anónimo FTP
+
+COMBOS:
+  # Descubrir hosts en red
+  nmap -sn [IP/MASCARA]
+
+  # Hosts mas descriptivos
+  nmap -sV -O [IP]
+  # Escaneo rápido top puertos
+  nmap -sV -sC -T4 [IP-OBJETIVO]
+
+  # Escaneo completo todos los puertos
+  nmap -sS -sV -sC -O -p- -T4 [IP-OBJETIVO]
+
+  # Sin ping (target no responde ICMP) + vuln
+  nmap -Pn -p- --script=vuln [IP-OBJETIVO]
+
+  # Stealth con decoys
+  nmap -sS -D RND:5 -T2 [IP-OBJETIVO]
+
+  # Guardar en todos los formatos
+  nmap -sV -sC -T4 -oA escaneo [IP-OBJETIVO]
+
+================================================================================

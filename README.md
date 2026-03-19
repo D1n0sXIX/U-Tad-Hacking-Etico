@@ -1,15 +1,24 @@
-# Hacking Ético 🔐
+# Ethical Hacking 🔐
+Repository for my **Ethical Hacking** course — 3rd year, Cybersecurity specialization at U-TAD.
 
-Repositorio donde subo herramientas y recursos que uso para la asignatura de **Hacking Ético** de 3º de carrera, mención en Ciberseguridad (U-Tad).
-## Aclaracion del repo
-El contenido de este repositorio ha sido desarrollado de forma activa durante el curso con apoyo de herramientas de IA (Claude) para estructurar ideas, revisar logica y reforzar conceptos.
-Todo el codigo, decisiones de diseño y aprendizajes reflejados son propios, la IA ha sido un recurso de apoyo, un "profesor de apoyo" 
-## Contenido
+All content is written in Spanish as this is an academic repository.
 
-- Scripts y herramientas propias
-- Apuntes y cheatsheets
-- Prácticas de clase
+## About this repo
+The content here has been developed throughout the course with AI assistance (Claude) to structure ideas, review logic and reinforce concepts. All code, design decisions and learning reflected here are my own — the AI has served as a support tool, not a replacement for understanding.
+
+## Structure
+
+| Folder / File | Description |
+|---|---|
+| `Tema-1-XSS-SQLi/` | Exercises and notes on XSS, SQL Injection, File Upload, XXE and Log Poisoning |
+| `cheatsheets/` | Quick reference sheets for tools and techniques |
+| `EsqueletoInformeAuditoria.docx` | Audit report template (.docx) |
+| `EsqueletoReporteAuditoria.txt` | Audit report template (.txt) |
+
+## Contents
+- Hands-on exercises by topic
+- Cheatsheets for tools and attack techniques
+- Audit report templates
 
 ---
-
-*Uso educativo*
+*Educational use only*

@@ -1,4 +1,4 @@
-# Ethical Hacking 🔐
+# Ethical Hacking
 Repository for my **Ethical Hacking** course — 3rd year, Cybersecurity specialization at U-TAD.
 
 All content is written in Spanish as this is an academic repository.

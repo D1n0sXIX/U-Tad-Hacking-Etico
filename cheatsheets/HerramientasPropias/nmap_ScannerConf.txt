@@ -1,0 +1,105 @@
+# nmap_flags.txt
+# D1n0 / Alejandro Mamán López-Mingo - INSO3A
+#
+# FORMAT:
+#   [Category Name]       → starts a new category
+#   flag | description    → a flag entry
+#   # comment             → ignored
+#   blank lines           → ignored
+#
+# PROFILES section:
+#   [PROFILES]
+#   profile_name | flag1 flag2 flag3 ...
+# ─────────────────────────────────────────────────────────────────────────────
+
+[Scan Type]
+-sS         | SYN scan — stealth, requires root
+-sT         | TCP connect scan — no root needed
+-sU         | UDP scan
+-sN         | TCP Null scan — no flags set
+-sF         | FIN scan
+-sX         | Xmas scan — FIN+PSH+URG
+-sA         | ACK scan — firewall rule mapping
+-sW         | Window scan
+-sM         | Maimon scan
+-sI         | Idle/zombie scan
+
+[Host Discovery]
+-sn         | Ping scan only — no port scan
+-Pn         | Skip host discovery — treat all hosts as up
+-PS         | TCP SYN ping
+-PA         | TCP ACK ping
+-PU         | UDP ping
+-PE         | ICMP echo ping
+-PP         | ICMP timestamp ping
+-PM         | ICMP netmask ping
+-R          | Always resolve DNS — get hostnames
+-n          | Never resolve DNS — faster scan
+
+[Port Selection]
+-p-             | All 65535 ports
+-p 1-1024       | Ports 1 to 1024
+-p 1-10000      | Ports 1 to 10000
+-p 80,443,8080  | Specific ports (example)
+--top-ports 100  | Top 100 most common ports
+--top-ports 1000 | Top 1000 most common ports
+-F              | Fast scan — top 100 ports
+
+[Detection]
+-sV                     | Service and version detection
+-O                      | OS detection — requires root
+-A                      | Aggressive — OS + version + scripts + traceroute
+--version-intensity 9   | Max version detection intensity (0-9)
+--version-light         | Light version detection — intensity 2
+--osscan-guess          | Guess OS more aggressively
+
+[Scripts NSE]
+-sC                         | Default NSE scripts
+--script smb-os-discovery   | SMB hostname and OS info — good for LAN
+--script banner             | Grab service banners
+--script http-title         | Get HTTP page titles
+--script ssh-hostkey        | Show SSH host keys
+--script ftp-anon           | Check FTP anonymous login
+--script dns-brute          | DNS subdomain brute force
+--script http-methods       | Enumerate HTTP methods allowed
+
+[Timing and Performance]
+-T0 | Paranoid — slowest, max IDS evasion
+-T1 | Sneaky
+-T2 | Polite — less bandwidth usage
+-T3 | Normal — default timing
+-T4 | Aggressive — faster, needs good network
+-T5 | Insane — fastest, may miss results
+--min-rate 1000  | Send at least 1000 packets per second
+--max-retries 1  | Limit retransmissions
+
+[Evasion and Spoofing]
+-f                  | Fragment packets — bypass simple firewalls
+-ff                 | Double fragment packets
+-D RND:5            | Decoy scan with 5 random decoys
+--randomize-hosts   | Randomize order of targets
+--data-length 25    | Pad packets with random data
+--ttl 64            | Set custom IP TTL value
+--spoof-mac 0       | Spoof MAC address — 0 = random
+-S <IP>             | Spoof source IP address
+
+[Output and Verbosity]
+-v          | Verbose output
+-vv         | Very verbose output
+-d          | Debug mode
+--reason    | Show reason for each port state
+--open      | Show only open ports
+--packet-trace | Show all packets sent and received
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PROFILES — saved flag combinations
+# Format: profile_name | flag1 flag2 flag3 ...
+# ─────────────────────────────────────────────────────────────────────────────
+
+[PROFILES]
+quick       | -sV -T4 -F --open
+full        | -sV -O -p- -T4 -R
+stealth     | -sS -T1 -f -n --randomize-hosts
+lan         | -sV -O -R --script smb-os-discovery -T4
+udp         | -sU -sV -T4 --top-ports 100
+aggressive  | -A -T4 -p- --open

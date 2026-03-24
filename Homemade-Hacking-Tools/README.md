@@ -1,10 +1,11 @@
 # D1n0s Hacking Tools
-### D1n0 — Alejandro Mamán · INSO 3A · U-TAD · 2025/26
+### 2025/26
 
 ## Description
 
 Collection of offensive security tools developed for educational purposes.
-
+<br>
+Supported with use of AI
 ---
 
 ## Tools

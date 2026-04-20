@@ -1,4 +1,4 @@
-# d1n0-recon-tool
+# 🦖 D1n0s-recon-tool
 
 A modular asset reconnaissance tool for Red Team exercises.
 Automates the full process of identifying and prioritizing the attack surface of a target organization.

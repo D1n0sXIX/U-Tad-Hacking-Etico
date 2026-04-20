@@ -1,0 +1,7 @@
+requests
+dnspython
+ipwhois
+shodan
+openpyxl
+rich
+beautifulsoup4

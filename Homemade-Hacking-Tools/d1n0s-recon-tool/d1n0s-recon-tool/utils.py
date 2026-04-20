@@ -3,7 +3,7 @@ import socket
 import dns.resolver
 import dns.reversename
 import requests
-import main
+import config
 
 
 #  User-agents
@@ -36,7 +36,7 @@ def get(url, params=None, headers=None, timeout=None):
             url,
             params=params,
             headers=_headers,
-            timeout=timeout or main.HTTP_TIMEOUT,
+            timeout=timeout or config.HTTP_TIMEOUT,
         )
         resp.raise_for_status()
         return resp

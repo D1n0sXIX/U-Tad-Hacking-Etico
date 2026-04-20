@@ -1,147 +1,171 @@
-# d1n0-recon-tool
+# 🦖 d1n0-recon-tool
 
-Herramienta modular de reconocimiento de activos para ejercicios Red Team. Automatiza el proceso completo de identificación de superficie de ataque: desde el análisis de la empresa hasta la enumeración de subdominios y servicios expuestos.
-
-> Desarrollada como parte del módulo de Red Teaming — Hacking Ético, U-TAD 2025/26
+A modular asset reconnaissance tool for Red Team exercises. Automates the full process of identifying and prioritizing the attack surface of a target organization.
 
 ---
 
-## Flujo de reconocimiento
+## Reconnaissance flow
 
 ```
-Empresa → ASN / Rangos de red → Dominios → Subdominios → Enumeración
+Company → ASN / IP Ranges → Domains → Subdomains → Enumeration → Prioritization
 ```
 
-Cada módulo recibe el output del anterior y vuelca los resultados en consola y en el Excel de superficie de ataque.
+Each module receives the output of the previous one and dumps results to the console and the attack surface Excel file.
 
 ---
 
-## Estructura del proyecto
+## Project structure
 
 ```
 d1n0-recon-tool/
 │
-├── main.py                  # Entry point. Argparse, timeouts globales, flujo principal
+├── main.py                  # Entry point. Argparse, global timeouts, main flow
+├── config.py                # Global config: timeouts, API keys (loaded from .env)
 │
 ├── modules/
-│   ├── company.py           # Análisis de la empresa: filiales, nombres anteriores, proveedores
-│   ├── asn.py               # Identificación de ASNs y rangos de red (BGP HE, RIRs, WhoisXMLAPI)
-│   ├── domains.py           # Dominios: reverse CIDR, reverse WHOIS, reverse NS/MX
-│   ├── subdomains.py        # Subdominios: crt.sh, Amass, Assetfinder, fuerza bruta DNS
-│   └── enumerate.py         # Enumeración: Shodan, httpx, Nuclei, EyeWitness
+│   ├── company.py           # Company analysis: subsidiaries, former names, providers
+│   ├── asn.py               # ASN identification via BGP Hurricane + RIPE
+│   ├── domains.py           # Domains: crt.sh, RIPE PTR, HackerTarget
+│   ├── subdomains.py        # Subdomains: crt.sh, HackerTarget
+│   ├── enumerate.py         # Enumeration: Shodan host lookup
+│   └── prioritize.py        # Asset prioritization based on interest criteria
 │
-├── utils.py                 # HTTP helper (user-agent rotatorio) + DNS helper compartidos
+├── utils.py                 # Shared HTTP helper (rotating user-agent) + DNS helper
+├── .env                     # API keys (not committed)
+├── .gitignore
+├── requirements.txt
 │
 └── output/
-    ├── excel_writer.py      # Rellena Attack_Surface.xlsx con los resultados
-    └── console.py           # Pretty print con rich
+    ├── excel_writer.py      # Fills Attack_Surface.xlsx with results
+    └── console.py           # Pretty print with rich
 ```
 
 ---
 
-## Módulos
+## Modules
 
 ### `modules/company.py`
-Punto de partida del reconocimiento. Dado el nombre de una organización, busca:
-- Nombres anteriores y variantes en otros países
-- Filiales y empresas subsidiarias
-- Proveedores relevantes
+Starting point of the reconnaissance. Given an organization name, searches for related entities across multiple public sources.
 
-Fuentes: búsqueda web, Wikipedia, web oficial.
+| Source | Method | Key required |
+|---|---|---|
+| Wikipedia API | Search by org name | No |
+| Wikidata API | Entity search | No |
+| DuckDuckGo Instant Answer | Related topics | No |
+| OpenCorporates | Company registry search | Yes — discarded (paid) |
+
+> ⚠️ Known issue: Wikipedia and DuckDuckGo return noisy results (sponsored pages, events, stadiums related to the org). Noise filtering is pending.
 
 ### `modules/asn.py`
-Identifica los sistemas autónomos y rangos de red registrados a nombre de la organización.
+Identifies autonomous systems and IP prefixes registered under the organization.
 
-| Fuente | Método |
-|---|---|
-| BGP Hurricane | `http://bgp.he.net/` — ASNs + rangos CIDR |
-| RIRs (ARIN, RIPE…) | Consulta WHOIS por nombre de org |
-| WhoisXMLAPI | Reverse Netblocks — rangos sin ASN propio |
-| Amass | `amass intel -org <org>` |
+| Source | Method | Key required |
+|---|---|---|
+| BGP Hurricane | HTML scraping of bgp.he.net/search | No |
+| RIPE Stat API | Announced prefixes by ASN | No |
+| WhoisXMLAPI | Reverse Netblocks by org name | Yes — discarded (IP blocked) |
 
 ### `modules/domains.py`
-Identifica dominios principales a partir de los rangos de red encontrados.
+Identifies main domains from discovered ASNs and IP ranges.
 
-| Técnica | Herramienta |
-|---|---|
-| Reverse CIDR / PTR | IPIP, WhoisXMLAPI, bgp.tools |
-| Reverse WHOIS | WhoisXMLAPI |
-| Reverse NS | viewdns.info/reversens |
-| Reverse MX | viewdns.info/reversemx |
+| Source | Method | Key required |
+|---|---|---|
+| crt.sh | SSL certificate search by org name | No |
+| RIPE Stat + PTR | Reverse DNS on announced prefixes | No |
+| HackerTarget | Host search by domain | No — rate limited (100 req/day) |
+
+> ⚠️ Known issue: crt.sh has been unstable (502/timeout). Results depend on service availability. HackerTarget free tier hits quota quickly.
 
 ### `modules/subdomains.py`
-Enumeración pasiva y activa de subdominios para cada dominio identificado.
+Passive subdomain enumeration for each identified domain.
 
-- **Pasivo:** crt.sh, VirusTotal, SecurityTrails, DNSdumpster
-- **Herramientas:** Amass (`enum -passive`), Assetfinder
-- **Fuerza bruta:** resolución masiva con diccionario (SecLists — `bitquark-subdomains-top100000.txt`)
+| Source | Method | Key required |
+|---|---|---|
+| crt.sh | SSL certificate wildcard search | No |
+| HackerTarget | Host search by domain | No — rate limited |
+
+> ⚠️ Known issue: same crt.sh instability as domains.py. When crt.sh is down, subdomains returns empty.
 
 ### `modules/enumerate.py`
-Enumeración de la superficie de ataque sobre todos los activos encontrados.
+Attack surface enumeration across all discovered assets.
 
-- Escaneo de puertos pasivo via Shodan
-- Validación de hosts web activos con httpx
-- Captura de screenshots con EyeWitness / GoWitness
-- Detección automática de vulnerabilidades con Nuclei
+- Per-IP lookup via Shodan free tier (`api.host()`)
+
+### `modules/prioritize.py`
+Asset prioritization based on Red Team interest criteria:
+
+- Ranges with unusual or non-unified open ports
+- Domains not found in public sources (potential Shadow IT)
+- Web applications with outdated technologies
+- Critical vulnerabilities detected by Nuclei
 
 ---
 
-## Utilidades
+## Utilities
 
 ### `utils.py`
-Funciones compartidas entre módulos para evitar código duplicado:
-- `get(url)` — request HTTP con user-agent rotatorio, timeout global y manejo de errores
-- `resolve(hostname)` — resolución DNS de hostname a IP
-- `ptr(ip)` — consulta PTR inversa
+Functions shared across modules:
+- `get(url)` — HTTP request with rotating user-agent, global timeout and error handling
+- `resolve(hostname)` — DNS resolution from hostname to IP
+- `ptr(ip)` — Reverse PTR lookup
 
 ---
 
 ## Output
 
 ### `output/excel_writer.py`
-Vuelca los resultados en `Attack_Surface.xlsx` siguiendo la estructura de hojas:
+Dumps results into `Attack_Surface.xlsx`:
 
-| Hoja | Campos |
+| Sheet | Fields |
 |---|---|
-| Empresas | Nombre, Fuente, RIRs, BGP HE, WhoisXML Netblock, WhoisXML Whois, Cloud_enum |
-| Rangos de red | CIDR, Fuente, ASN, Amass, Nmap |
-| Dominios | Dominio, Fuente, Amass Intel, Reverse NS, Reverse MX, Amass Enum, Assetfinder, Shodan SSL, Subscan, SecurityTrails, Leaks |
-| Subdominios | FQDN, Dominio Padre, IP, Resolución, EyeWitness, Nuclei |
+| Companies | Name, Source |
+| IP Ranges | ASN, Name, Source, Country |
+| Domains | Domain, Source |
+| Subdomains | FQDN, Parent Domain, IP, Resolution, EyeWitness, Nuclei |
 
 ### `output/console.py`
-Output por consola usando `rich`. Muestra los resultados por fases con colores y tablas.
+Console output using `rich`. Displays results per phase with colors and tables. Always shown regardless of `--no-excel`.
 
 ---
 
-## APIs requeridas
+## Required APIs
 
-| Servicio | Key necesaria | Free tier | Uso |
+| Service | Key required | Free tier | Status |
 |---|---|---|---|
-| Shodan | Sí | Sí (limitado) | Enumeración pasiva de puertos |
-| WhoisXMLAPI | Sí | Sí | Reverse Netblocks, Reverse WHOIS |
-| BGP Hurricane | No | — | ASNs y rangos |
-| crt.sh | No | — | Subdominios por certificados SSL |
-| viewdns.info | No | — | Reverse NS / MX |
-| ipwhois | No | — | Consultas WHOIS/RIR locales |
+| Shodan | Yes | Yes (limited to host lookup) | ✅ In use |
+| BGP Hurricane | No | — | ✅ In use |
+| RIPE Stat | No | — | ✅ In use |
+| Wikipedia / Wikidata | No | — | ✅ In use |
+| DuckDuckGo | No | — | ✅ In use |
+| crt.sh | No | — | ⚠️ In use — unstable (502/timeouts) |
+| HackerTarget | No | Yes (100 req/day) | ⚠️ In use — quota hits quickly |
+| WhoisXMLAPI | Yes | Yes | ❌ Discarded — IP blocked |
+| OpenCorporates | Yes | No | ❌ Discarded — paid plan |
 
-Las API keys se configuran como variables de entorno:
+API keys are loaded from `.env`:
 
-```bash
-export SHODAN_API_KEY="..."
-export WHOISXML_API_KEY="..."
+```
+SHODAN_API_KEY=your_key_here
 ```
 
 ---
 
-## Instalación
+## Installation
 
 ```bash
 git clone https://github.com/D1n0/d1n0-recon-tool
-cd d1n0s-recon-tool
+cd d1n0-recon-tool
 pip install -r requirements.txt
 ```
 
-**Dependencias principales:**
+> **Kali Linux:** use `pip3` and `python3` explicitly. `pip` and `python` point to Python 2.7.
+
+```bash
+pip3 install -r requirements.txt --break-system-packages
+python3 main.py -t "Target Organization"
+```
+
+**Main dependencies:**
 ```
 requests
 dnspython
@@ -149,39 +173,49 @@ ipwhois
 shodan
 openpyxl
 rich
+beautifulsoup4
+python-dotenv
 ```
 
 ---
 
-## Uso
+## Usage
 
 ```bash
-# Reconocimiento completo
-python main.py -t "Nombre Empresa"
+# Full reconnaissance
+python main.py -t "Target Organization"
 
-# Solo un módulo concreto
-python main.py -t "Nombre Empresa" --only asn
-python main.py -t "Nombre Empresa" --only subdomains
+# Single module
+python main.py -t "Target Organization" --only asn
+python main.py -t "Target Organization" --only subdomains
 
-# Módulos disponibles: company, asn, domains, subdomains, enumerate
+# Available modules: company, asn, domains, subdomains, enumerate, prioritize
 
-# Especificar output Excel
-python main.py -t "Nombre Empresa" --output Attack_Surface.xlsx
+# Custom Excel output path
+python main.py -t "Target Organization" --output Attack_Surface.xlsx
+
+# Console only, no Excel
+python main.py -t "Target Organization" --no-excel
 ```
 
 ---
 
-## Metodología de referencia
+## Development status
 
-Basado en el flujo de reconocimiento del Tema 2 — Técnicas de Red Teaming (U-TAD 25/26):
-
-1. **Análisis de la empresa** — identificar todas las entidades dentro del alcance
-2. **Sistemas autónomos** — BGP HE + RIRs → rangos CIDR
-3. **Rangos adicionales** — WhoisXMLAPI Reverse Netblocks
-4. **Dominios principales** — Reverse CIDR/PTR + Reverse WHOIS + Reverse NS/MX
-5. **Subdominios** — enumeración pasiva + fuerza bruta activa
-6. **Enumeración** — puertos, apps web, tecnologías, vulnerabilidades
+| File | Status |
+|---|---|
+| `main.py` | ✅ Done |
+| `config.py` | ✅ Done |
+| `utils.py` | ✅ Done |
+| `output/console.py` | ✅ Done |
+| `output/excel_writer.py` | ✅ Done |
+| `modules/company.py` | ⚠️ Working — noise filtering pending |
+| `modules/asn.py` | ✅ Done |
+| `modules/domains.py` | ⚠️ Working — depends on crt.sh availability |
+| `modules/subdomains.py` | ⚠️ Working — depends on crt.sh availability |
+| `modules/enumerate.py` | ⬜ Pending |
+| `modules/prioritize.py` | ⬜ Pending |
 
 ---
 
-*d1n0 · U-TAD Hacking Ético 2025/26*
+*d1n0 · Ethical Hacking 2025/26*

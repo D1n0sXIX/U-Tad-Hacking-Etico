@@ -147,6 +147,13 @@ git clone https://github.com/D1n0/d1n0-recon-tool
 cd d1n0-recon-tool
 pip install -r requirements.txt
 ```
+> **Kali Linux:** use `pip3` and `python3` explicitly. `pip` and `python` point to Python 2.7.
+
+```bash
+pip3 install -r requirements.txt --break-system-packages
+python3 main.py -t "Target Organization"
+```
+
 
 **Main dependencies:**
 ```

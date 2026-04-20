@@ -1,5 +1,5 @@
 import utils
-from output.console import info, success, warning
+from output.console import info, success, warning, print_table
 
 # Fuentes
 def _from_wikipedia(target):
@@ -123,5 +123,6 @@ def get_company_info(results):
 
     # Limpiar duplicados y agregar
     results["companies"] = _deduplicate(data)
+    print_table("Empresas encontradas", ["Nombre", "Fuente"], [(c["name"], c["source"]) for c in results["companies"]])
 
     return results

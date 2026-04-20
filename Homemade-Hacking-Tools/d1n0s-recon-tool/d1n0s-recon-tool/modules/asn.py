@@ -1,6 +1,6 @@
 import utils
 from ipwhois import IPWhois
-from output.console import info, success, warning
+from output.console import info, success, warning, print_table
 from bs4 import BeautifulSoup
 
 
@@ -74,4 +74,5 @@ def get_asn_info(results):
     results["asns"]   = _deduplicate_asns(data)
     results["ranges"] = _extract_ranges(data)
 
+    print_table("ASNs encontrados", ["ASN", "Nombre", "País", "Fuente"], [(a["asn"], a["name"], a["country"], a["source"]) for a in results["asns"]])
     return results

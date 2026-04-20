@@ -1,11 +1,10 @@
 # 🦖 D1n0s-recon-tool
 
-A modular asset reconnaissance tool for Red Team exercises.
-Automates the full process of identifying and prioritizing the attack surface of a target organization.
+A modular asset reconnaissance tool for Red Team exercises. Automates the full process of identifying and prioritizing the attack surface of a target organization.
 
 ---
 
-## Reconnaissance Flow
+## Reconnaissance flow
 
 ```
 Company → ASN / IP Ranges → Domains → Subdomains → Enumeration → Prioritization
@@ -21,16 +20,20 @@ Each module receives the output of the previous one and dumps results to the con
 d1n0-recon-tool/
 │
 ├── main.py                  # Entry point. Argparse, global timeouts, main flow
+├── config.py                # Global config: timeouts, API keys (loaded from .env)
 │
 ├── modules/
 │   ├── company.py           # Company analysis: subsidiaries, former names, providers
-│   ├── asn.py               # ASN and IP range identification (BGP HE, RIRs, WhoisXMLAPI)
-│   ├── domains.py           # Domains: reverse CIDR, reverse WHOIS, reverse NS/MX
-│   ├── subdomains.py        # Subdomains: crt.sh, Amass, Assetfinder, DNS brute-force
-│   ├── enumerate.py         # Enumeration: Shodan, httpx, Nuclei, EyeWitness
+│   ├── asn.py               # ASN identification via BGP Hurricane
+│   ├── domains.py           # Domains: reverse CIDR, reverse NS/MX
+│   ├── subdomains.py        # Subdomains: crt.sh, DNS brute-force
+│   ├── enumerate.py         # Enumeration: Shodan, httpx, Nuclei
 │   └── prioritize.py        # Asset prioritization based on interest criteria
 │
 ├── utils.py                 # Shared HTTP helper (rotating user-agent) + DNS helper
+├── .env                     # API keys (not committed)
+├── .gitignore
+├── requirements.txt
 │
 └── output/
     ├── excel_writer.py      # Fills Attack_Surface.xlsx with results
@@ -42,44 +45,43 @@ d1n0-recon-tool/
 ## Modules
 
 ### `modules/company.py`
-Starting point of the reconnaissance. Given an organization name, it searches for:
-- Former names and variants in other countries
-- Subsidiaries and owned companies
-- Relevant providers
+Starting point of the reconnaissance. Given an organization name, searches for related entities across multiple public sources.
+
+| Source | Method | Key required |
+|---|---|---|
+| Wikipedia API | Search by org name | No |
+| Wikidata API | Entity search | No |
+| DuckDuckGo Instant Answer | Related topics | No |
+| OpenCorporates | Company registry search | Yes — discarded (paid) |
 
 ### `modules/asn.py`
-Identifies autonomous systems and IP ranges registered under the organization.
+Identifies autonomous systems registered under the organization name.
 
-| Source | Method |
-|---|---|
-| BGP Hurricane | `http://bgp.he.net/` — ASNs + CIDR ranges |
-| RIRs (RIPE…) | WHOIS query by org name |
-| WhoisXMLAPI | Reverse Netblocks — ranges without own ASN |
-| Amass | `amass intel -org <org>` |
+| Source | Method | Key required |
+|---|---|---|
+| BGP Hurricane | HTML scraping of bgp.he.net/search | No |
+| WhoisXMLAPI | Reverse Netblocks by org name | Yes — discarded (IP blocked) |
 
 ### `modules/domains.py`
-Identifies main domains from the discovered IP ranges.
+Identifies main domains from the discovered ASNs and IP ranges.
 
 | Technique | Tool |
 |---|---|
-| Reverse CIDR / PTR | IPIP, WhoisXMLAPI, bgp.tools |
-| Reverse WHOIS | WhoisXMLAPI |
+| Reverse CIDR / PTR | bgp.tools |
 | Reverse NS | viewdns.info/reversens |
 | Reverse MX | viewdns.info/reversemx |
 
 ### `modules/subdomains.py`
 Passive and active subdomain enumeration for each identified domain.
 
-- **Passive:** crt.sh, VirusTotal, SecurityTrails, DNSdumpster
-- **Tools:** Amass (`enum -passive`), Assetfinder
-- **Brute-force:** mass DNS resolution with wordlist (SecLists — `bitquark-subdomains-top100000.txt`)
+- **Passive:** crt.sh, DNSdumpster
+- **Brute-force:** DNS resolution with wordlist (SecLists — `bitquark-subdomains-top100000.txt`)
 
 ### `modules/enumerate.py`
 Attack surface enumeration across all discovered assets.
 
-- Passive port scanning via Shodan
+- Per-IP lookup via Shodan free tier (`api.host()`)
 - Live web host validation with httpx
-- Screenshots with EyeWitness / GoWitness
 - Automated vulnerability detection with Nuclei
 
 ### `modules/prioritize.py`
@@ -105,14 +107,14 @@ Functions shared across modules:
 ## Output
 
 ### `output/excel_writer.py`
-Dumps results into `Attack_Surface.xlsx` following the sheet structure:
+Dumps results into `Attack_Surface.xlsx`:
 
 | Sheet | Fields |
 |---|---|
-| Companies | Name, Source, RIRs, BGP HE, WhoisXML Netblock, WhoisXML Whois, Cloud_enum |
-| IP Ranges | CIDR, Source, ASN, Amass, Nmap |
-| Domains | Domain, Source, Amass Intel, Reverse NS, Reverse MX, Amass Enum, Assetfinder, Shodan SSL, Subscan, SecurityTrails, Leaks |
-| Subdomains | FQDN, Parent Domain, IP Address, Resolution, EyeWitness, Nuclei |
+| Companies | Name, Source |
+| IP Ranges | ASN, Name, Source, Country |
+| Domains | Domain, Source, Reverse NS, Reverse MX... |
+| Subdomains | FQDN, Parent Domain, IP, Resolution, EyeWitness, Nuclei |
 
 ### `output/console.py`
 Console output using `rich`. Displays results per phase with colors and tables.
@@ -121,19 +123,19 @@ Console output using `rich`. Displays results per phase with colors and tables.
 
 ## Required APIs
 
-| Service | Key required | Free tier | Usage |
+| Service | Key required | Free tier | Status |
 |---|---|---|---|
-| Shodan | Yes | Yes (limited) | Passive port enumeration |
-| WhoisXMLAPI | Yes | Yes | Reverse Netblocks, Reverse WHOIS |
-| BGP Hurricane | No | — | ASNs and ranges |
-| crt.sh | No | — | Subdomains via SSL certificates |
-| viewdns.info | No | — | Reverse NS / MX |
+| Shodan | Yes | Yes (limited to host lookup) | ✅ In use |
+| BGP Hurricane | No | — | ✅ In use |
+| Wikipedia / Wikidata | No | — | ✅ In use |
+| DuckDuckGo | No | — | ✅ In use |
+| WhoisXMLAPI | Yes | Yes | ❌ Discarded — IP blocked |
+| OpenCorporates | Yes | No | ❌ Discarded — paid plan |
 
-API keys are set as environment variables:
+API keys are loaded from `.env`:
 
-```bash
-export SHODAN_API_KEY="..."
-export WHOISXML_API_KEY="..."
+```
+SHODAN_API_KEY=your_key_here
 ```
 
 ---
@@ -154,6 +156,8 @@ ipwhois
 shodan
 openpyxl
 rich
+beautifulsoup4
+python-dotenv
 ```
 
 ---
@@ -184,11 +188,12 @@ python main.py -t "Target Organization" --no-excel
 | File | Status |
 |---|---|
 | `main.py` | ✅ Done |
+| `config.py` | ✅ Done |
 | `utils.py` | ✅ Done |
 | `output/console.py` | ✅ Done |
 | `output/excel_writer.py` | ✅ Done |
-| `modules/company.py` | 🔧 In progress |
-| `modules/asn.py` | ⬜ Pending |
+| `modules/company.py` | ⚠️ Working — noise filtering pending |
+| `modules/asn.py` | ✅ Done |
 | `modules/domains.py` | ⬜ Pending |
 | `modules/subdomains.py` | ⬜ Pending |
 | `modules/enumerate.py` | ⬜ Pending |

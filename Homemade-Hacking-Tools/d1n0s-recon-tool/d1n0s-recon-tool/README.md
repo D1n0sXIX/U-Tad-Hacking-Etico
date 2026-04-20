@@ -1,4 +1,4 @@
-# 🦖 D1n0s-recon-tool
+# 🦖 d1n0-recon-tool
 
 A modular asset reconnaissance tool for Red Team exercises. Automates the full process of identifying and prioritizing the attack surface of a target organization.
 
@@ -24,10 +24,10 @@ d1n0-recon-tool/
 │
 ├── modules/
 │   ├── company.py           # Company analysis: subsidiaries, former names, providers
-│   ├── asn.py               # ASN identification via BGP Hurricane
-│   ├── domains.py           # Domains: reverse CIDR, reverse NS/MX
-│   ├── subdomains.py        # Subdomains: crt.sh, DNS brute-force
-│   ├── enumerate.py         # Enumeration: Shodan, httpx, Nuclei
+│   ├── asn.py               # ASN identification via BGP Hurricane + RIPE
+│   ├── domains.py           # Domains: crt.sh, RIPE PTR, HackerTarget
+│   ├── subdomains.py        # Subdomains: crt.sh, HackerTarget
+│   ├── enumerate.py         # Enumeration: Shodan host lookup
 │   └── prioritize.py        # Asset prioritization based on interest criteria
 │
 ├── utils.py                 # Shared HTTP helper (rotating user-agent) + DNS helper
@@ -54,35 +54,42 @@ Starting point of the reconnaissance. Given an organization name, searches for r
 | DuckDuckGo Instant Answer | Related topics | No |
 | OpenCorporates | Company registry search | Yes — discarded (paid) |
 
+> ⚠️ Known issue: Wikipedia and DuckDuckGo return noisy results (sponsored pages, events, stadiums related to the org). Noise filtering is pending.
+
 ### `modules/asn.py`
-Identifies autonomous systems registered under the organization name.
+Identifies autonomous systems and IP prefixes registered under the organization.
 
 | Source | Method | Key required |
 |---|---|---|
 | BGP Hurricane | HTML scraping of bgp.he.net/search | No |
+| RIPE Stat API | Announced prefixes by ASN | No |
 | WhoisXMLAPI | Reverse Netblocks by org name | Yes — discarded (IP blocked) |
 
 ### `modules/domains.py`
-Identifies main domains from the discovered ASNs and IP ranges.
+Identifies main domains from discovered ASNs and IP ranges.
 
-| Technique | Tool |
-|---|---|
-| Reverse CIDR / PTR | bgp.tools |
-| Reverse NS | viewdns.info/reversens |
-| Reverse MX | viewdns.info/reversemx |
+| Source | Method | Key required |
+|---|---|---|
+| crt.sh | SSL certificate search by org name | No |
+| RIPE Stat + PTR | Reverse DNS on announced prefixes | No |
+| HackerTarget | Host search by domain | No — rate limited (100 req/day) |
+
+> ⚠️ Known issue: crt.sh has been unstable (502/timeout). Results depend on service availability. HackerTarget free tier hits quota quickly.
 
 ### `modules/subdomains.py`
-Passive and active subdomain enumeration for each identified domain.
+Passive subdomain enumeration for each identified domain.
 
-- **Passive:** crt.sh, DNSdumpster
-- **Brute-force:** DNS resolution with wordlist (SecLists — `bitquark-subdomains-top100000.txt`)
+| Source | Method | Key required |
+|---|---|---|
+| crt.sh | SSL certificate wildcard search | No |
+| HackerTarget | Host search by domain | No — rate limited |
+
+> ⚠️ Known issue: same crt.sh instability as domains.py. When crt.sh is down, subdomains returns empty.
 
 ### `modules/enumerate.py`
 Attack surface enumeration across all discovered assets.
 
 - Per-IP lookup via Shodan free tier (`api.host()`)
-- Live web host validation with httpx
-- Automated vulnerability detection with Nuclei
 
 ### `modules/prioritize.py`
 Asset prioritization based on Red Team interest criteria:
@@ -113,11 +120,11 @@ Dumps results into `Attack_Surface.xlsx`:
 |---|---|
 | Companies | Name, Source |
 | IP Ranges | ASN, Name, Source, Country |
-| Domains | Domain, Source, Reverse NS, Reverse MX... |
+| Domains | Domain, Source |
 | Subdomains | FQDN, Parent Domain, IP, Resolution, EyeWitness, Nuclei |
 
 ### `output/console.py`
-Console output using `rich`. Displays results per phase with colors and tables.
+Console output using `rich`. Displays results per phase with colors and tables. Always shown regardless of `--no-excel`.
 
 ---
 
@@ -127,8 +134,11 @@ Console output using `rich`. Displays results per phase with colors and tables.
 |---|---|---|---|
 | Shodan | Yes | Yes (limited to host lookup) | ✅ In use |
 | BGP Hurricane | No | — | ✅ In use |
+| RIPE Stat | No | — | ✅ In use |
 | Wikipedia / Wikidata | No | — | ✅ In use |
 | DuckDuckGo | No | — | ✅ In use |
+| crt.sh | No | — | ⚠️ In use — unstable (502/timeouts) |
+| HackerTarget | No | Yes (100 req/day) | ⚠️ In use — quota hits quickly |
 | WhoisXMLAPI | Yes | Yes | ❌ Discarded — IP blocked |
 | OpenCorporates | Yes | No | ❌ Discarded — paid plan |
 
@@ -147,13 +157,13 @@ git clone https://github.com/D1n0/d1n0-recon-tool
 cd d1n0-recon-tool
 pip install -r requirements.txt
 ```
+
 > **Kali Linux:** use `pip3` and `python3` explicitly. `pip` and `python` point to Python 2.7.
 
 ```bash
 pip3 install -r requirements.txt --break-system-packages
 python3 main.py -t "Target Organization"
 ```
-
 
 **Main dependencies:**
 ```
@@ -201,8 +211,8 @@ python main.py -t "Target Organization" --no-excel
 | `output/excel_writer.py` | ✅ Done |
 | `modules/company.py` | ⚠️ Working — noise filtering pending |
 | `modules/asn.py` | ✅ Done |
-| `modules/domains.py` | ⬜ Pending |
-| `modules/subdomains.py` | ⬜ Pending |
+| `modules/domains.py` | ⚠️ Working — depends on crt.sh availability |
+| `modules/subdomains.py` | ⚠️ Working — depends on crt.sh availability |
 | `modules/enumerate.py` | ⬜ Pending |
 | `modules/prioritize.py` | ⬜ Pending |
 

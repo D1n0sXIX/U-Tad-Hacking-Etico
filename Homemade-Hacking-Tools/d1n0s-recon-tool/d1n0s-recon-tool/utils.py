@@ -48,7 +48,7 @@ def get(url, params=None, headers=None, timeout=None):
 # resolve() --> resuelve hostname a IPs
 def resolve(hostname, timeout=None):
     resolver = dns.resolver.Resolver()
-    resolver.lifetime = timeout or main.DNS_TIMEOUT
+    resolver.lifetime = timeout
 
     try:
         answers = resolver.resolve(hostname, "A")
@@ -59,7 +59,7 @@ def resolve(hostname, timeout=None):
 # ptr() --> consulta PTR inversa de una IP
 def ptr(ip, timeout=None):
     resolver = dns.resolver.Resolver()
-    resolver.lifetime = timeout or main.DNS_TIMEOUT
+    resolver.lifetime = timeout
 
     try:
         rev = dns.reversename.from_address(ip)

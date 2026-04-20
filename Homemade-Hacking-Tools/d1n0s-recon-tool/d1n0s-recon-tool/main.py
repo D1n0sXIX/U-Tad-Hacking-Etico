@@ -5,8 +5,8 @@ from config import HTTP_TIMEOUT, DNS_TIMEOUT, SHODAN_API_KEY
 
 from modules.company import get_company_info
 from modules.asn import get_asn_info
-#from modules.domains import get_domains_info
-#from modules.subdomains import get_subdomains_info
+from modules.domains import get_domains_info
+from modules.subdomains import get_subdomains_info
 #from modules.enumerate import get_enumerate_info
 #from modules.prioritize import get_prioritize_info
 
@@ -14,8 +14,8 @@ from modules.asn import get_asn_info
 MODULES = {
     "company":    get_company_info,
     "asn":        get_asn_info,
- #   "domains":    get_domains_info,
-  #  "subdomains": get_subdomains_info,
+    "domains":    get_domains_info,
+    "subdomains": get_subdomains_info,
    # "enumerate":  get_enumerate_info,
     #"prioritize": get_prioritize_info,
 }

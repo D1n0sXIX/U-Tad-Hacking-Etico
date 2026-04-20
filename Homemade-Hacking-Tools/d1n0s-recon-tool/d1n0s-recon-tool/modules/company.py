@@ -68,33 +68,6 @@ def _from_wikidata(target):
         })
     return results_list
 
-def _from_opencorporates(target):
-    resp = utils.get(
-        "https://api.opencorporates.com/v0.4/companies/search",
-        params={"q": target}
-    )
-    if not resp:
-        warning("OpenCorporates API no respondió")
-        return []
-
-    data = resp.json()
-
-    if not data["results"]["companies"]:
-        return []
-
-    results_list = []
-    for item in data["results"]["companies"]:
-        company = item["company"]
-        results_list.append({
-            "name": company["name"],
-            "source": "opencorporates",
-            "subsidiaries": [],
-            "former_names": [],
-            "providers": [],
-            "countries": [company.get("jurisdiction_code", "")],
-        })
-    return results_list
-
 def _from_duckduckgo(target):
     resp = utils.get(
         "https://api.duckduckgo.com/",
@@ -146,7 +119,6 @@ def get_company_info(results):
     # Fuentes
     data += _from_wikipedia(target)
     data += _from_wikidata(target)
-    data += _from_opencorporates(target)
     data += _from_duckduckgo(target)
 
     # Limpiar duplicados y agregar

@@ -5,3 +5,4 @@ shodan
 openpyxl
 rich
 beautifulsoup4
+python-dotenv

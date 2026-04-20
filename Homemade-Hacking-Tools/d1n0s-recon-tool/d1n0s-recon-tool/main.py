@@ -1,7 +1,7 @@
 import argparse
 import os
 import sys
-from config import HTTP_TIMEOUT, DNS_TIMEOUT, SHODAN_API_KEY, WHOISXML_API_KEY
+from config import HTTP_TIMEOUT, DNS_TIMEOUT, SHODAN_API_KEY
 
 from modules.company import get_company_info
 from modules.asn import get_asn_info

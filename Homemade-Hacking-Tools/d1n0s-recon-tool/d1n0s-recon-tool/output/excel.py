@@ -65,15 +65,14 @@ def _write_companies(wb, results):
 
 def _write_ranges(wb, results):
     ws = wb.create_sheet("Rangos de red")
-    headers = ["CIDR", "Fuente", "ASN", "Amass", "Nmap"]
+    headers = ["ASN", "Nombre", "Fuente", "País"]
     ws.append(headers)
-    for r in results.get("ranges", []):
+    for r in results.get("asns", []):
         ws.append([
-            r.get("cidr", ""),
-            r.get("source", ""),
             r.get("asn", ""),
-            r.get("amass", ""),
-            r.get("nmap", ""),
+            r.get("name", ""),
+            r.get("source", ""),
+            r.get("country", ""),
         ])
     _style_header(ws)
     _autofit(ws)

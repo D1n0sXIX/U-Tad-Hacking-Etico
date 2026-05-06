@@ -34,7 +34,7 @@ Servidor DNS para captura: https://gist.github.com/andreif/6069838
 Sub AutoOpen()
 Dim Shell As Object
 Set Shell = CreateObject("wscript.shell")
-Shell.Run "notepad"
+Shell.Run "notepad"  ' placeholder — sustituir por el comando/payload real
 End Sub
 ```
 Usar extensión `.doc` en vez de `.docx` o `.docm`.

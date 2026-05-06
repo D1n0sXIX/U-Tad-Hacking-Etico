@@ -1,5 +1,5 @@
 # 5. Elevación de privilegios
-## D1n0 - Alejandro Maman INSO3A U-TAD
+## D1n0 - Alejandro Maman INSO3A U-TAD - 2025/2026
 
 ### Elevación en Windows
 Principales técnicas:

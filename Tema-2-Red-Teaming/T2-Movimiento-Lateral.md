@@ -1,5 +1,5 @@
 # 7. Movimiento lateral
-## D1n0 - Alejandro Maman INSO3A U-TAD
+## D1n0 - Alejandro Maman INSO3A U-TAD - 2025/2026
 
 ### Protocolos para movimiento lateral
 - **SMB** (Server Message Block)

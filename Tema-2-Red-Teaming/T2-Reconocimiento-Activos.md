@@ -1,5 +1,5 @@
 # 2. Reconocimiento de activos
-## D1n0 - Alejandro Maman INSO3A U-TAD
+## D1n0 - Alejandro Maman INSO3A U-TAD - 2025/2026
 
 ### Introducción
 Objetivo: mapear todos los activos e información posible. Ámbitos:

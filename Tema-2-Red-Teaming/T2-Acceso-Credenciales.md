@@ -1,5 +1,5 @@
 # 6. Acceso a credenciales
-## D1n0 - Alejandro Maman INSO3A U-TAD
+## D1n0 - Alejandro Maman INSO3A U-TAD - 2025/2026
 
 ### Tipos de credenciales obtenibles
 - Claves en texto claro (archivos)

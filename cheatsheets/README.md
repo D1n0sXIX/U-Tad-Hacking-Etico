@@ -15,9 +15,7 @@
 | `CrackingCheatSheet.txt` | John / Hashcat | Cracking de hashes offline |
 | `test.php` | - | Webshell básica vía `$_GET['cmd']` |
 | `webshell.php` | - | Webshell con `shell_exec` |
-| `RedTeaming/` | - | Cheatsheets específicos de Red Teaming (tunelización, reconocimiento, vectores, privesc, credenciales, movimiento lateral, compromiso interno y persistencia)
- |
-
+| `RedTeaming/` | - | Cheatsheets de Red Teaming: fundamentos AD, tunelización, reconocimiento, vectores de acceso, descubrimiento interno, privesc, credenciales, movimiento lateral, compromiso interno y persistencia |
 
 ## Uso
 

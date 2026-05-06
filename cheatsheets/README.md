@@ -1,4 +1,4 @@
-# Cheatsheets - Hacking Ético
+# Cheatsheets - Hacking Ético  🦖 
 > Referencias rápidas para uso en prácticas, CTFs y exámenes.
 
 ## Contenido

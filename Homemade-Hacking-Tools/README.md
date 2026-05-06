@@ -1,4 +1,4 @@
-# D1n0s Hacking Tools
+# D1n0s Hacking Tools  🦖 
 ### 2025/26
 
 ## Description

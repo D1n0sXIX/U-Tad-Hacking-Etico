@@ -1,0 +1,104 @@
+===========================================================
+  T2 - 1. INTRODUCCION RED TEAM + INFRAESTRUCTURA + TUNELES
+===========================================================
+
+--- ESTRUCTURA TIPICA DE ORG ---
+Internet --- Firewall --- DMZ --- Red Interna --- Proveedores
+
+--- AMBITOS DE ACTUACION ---
+Digital  : sistemas Internet, Wi-Fi, web
+Fisica   : videovigilancia, control acceso, guardias
+Humana   : phishing, vishing, acceso fisico
+
+--- TIEMPOS RECOMENDADOS ---
+Breach model: 25-50% busqueda vector / resto intrusion interna
+
+--- EQUIPOS ---
+Red    : ofensivo externo (sin info)
+Blue   : defensa interna
+White  : conocen el ejercicio (alto nivel)
+Purple : mixto (rapido pero no caja negra)
+
+===========================================================
+  INFRAESTRUCTURA - VPS
+===========================================================
+- Usuario sin shell + SSH con certificado
+- VPS propio confiable como salto a los demas
+- VPS en paises distintos (preferible enfrentados)
+- Kill-switch: si cae VPN, no salen paquetes
+- VPS "chungos" mensuales
+
+Plataformas:
+  Anonimato     : TOR, VPN, VPS
+  Enumeracion   : VPN + VPS normales/anonimos
+  Intrusion     : VPS segun activo
+  Persistencia  : VPS receptores + Cloud (IP Laundry) + Domain Fronting
+
+===========================================================
+  TUNELES SSH
+===========================================================
+
+--- DINAMICO (SOCKS proxy) ---
+ssh -D [PUERTO-LOCAL] [USER]@[IP-VPS]
+# Luego: editar /etc/proxychains.conf -> socks5 127.0.0.1 [PUERTO-LOCAL]
+# Uso: proxychains <comando>
+
+--- LOCAL (mapear puerto remoto -> local) ---
+ssh -L [P-LOCAL]:[IP-OBJETIVO]:[P-OBJETIVO] [USER]@[IP-VPS]
+
+--- REMOTO (exponer puerto local -> servidor) ---
+ssh -R [P-REMOTO]:127.0.0.1:[P-LOCAL] [USER]@[IP-VPS]
+
+--- FLAGS UTILES ---
+-N    : sin shell remota
+-f    : background
+-C    : compresion
+-q    : silencioso
+-i    : clave privada
+
+===========================================================
+  ENCADENAR TUNELES (multi-hop)
+===========================================================
+# Hop 1: Kali -> VPS intermedio
+ssh -L 8080:127.0.0.1:9090 [USER]@[VPS1]
+
+# Hop 2: desde VPS1, dinamico al final
+ssh -D 9090 [USER]@[VPS2]
+
+# Resultado: proxychains apuntando a 127.0.0.1:8080 sale por VPS2
+
+===========================================================
+  SSH SOBRE TOR
+===========================================================
+service tor start
+# Editar /etc/proxychains.conf  (ultima linea):
+#   socks5 127.0.0.1 9050
+proxychains ssh -D [PUERTO-LOCAL] [USER]@[IP-VPS]
+
+===========================================================
+  TECNICAS AVANZADAS DE OFUSCACION
+===========================================================
+
+--- DOMINIOS UTILES ---
+- Similares al de la entidad
+- Caducados recientemente (categorizados)
+- Buscador: http://expireddomains.net/
+
+--- VISUAL SPOOFING (homoglyph) ---
+http://www.irongeek.com/homoglyph-attack-generator.php
+
+--- DOMAIN FRONTING ---
+Ocultar IP real del VPS tras CDN confiable:
+- https://cloud.google.com/appengine/
+- https://aws.amazon.com/cloudfront/
+- https://azure.microsoft.com/
+
+===========================================================
+  RECORDATORIOS BLUE TEAM
+===========================================================
+- Monitorizacion entre subredes
+- Proxies salida (trafico saliente)
+- AV en endpoints
+- Monitorizacion AD
+- Honeypots en sistemas/red/AD
+- NO crear/alterar recursos locales innecesarios

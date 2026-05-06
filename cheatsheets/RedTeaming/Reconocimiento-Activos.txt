@@ -1,0 +1,128 @@
+===========================================================
+  T2 - 2. RECONOCIMIENTO DE ACTIVOS
+===========================================================
+Ciclo grandes empresas:
+  ASN -> Rangos de red -> Dominios -> Subdominios -> Superficie
+
+===========================================================
+  ASN (Sistemas Autonomos)
+===========================================================
+- https://whois.arin.net          (RIRs)
+- http://bgp.he.net/              (BGP Hurricane)
+
+===========================================================
+  RANGOS DE RED
+===========================================================
+- WhoisXMLapi (Reverse IP Netblocks)
+- amass intel -org [ORGANIZACION]
+
+===========================================================
+  DOMINIOS
+===========================================================
+Reverse CIDR/PTR : IPIP, WhoisXMLapi, bgp.tools
+Reverse Whois    : WhoisXMLapi (palabra clave en whois)
+Reverse NS       : https://viewdns.info/reversens/
+Reverse MX       : https://viewdns.info/reversemx/
+
+===========================================================
+  SUBDOMINIOS
+===========================================================
+Pasivo:
+  - WhoisXMLAPI, Spyse, Omnisint
+  - crt.sh, Censys, Shodan        (certificados)
+  - DNSdumpster, VirusTotal, Google Transparency
+  - Google Hacking
+
+Activo (brute force):
+  - subscan, massdns, altdns
+  - Diccionario: bitquark-subdomains-top100000.txt
+
+--- AMASS ---
+amass enum -d [DOMINIO] -src
+amass enum -passive -d [DOMINIO] -src
+
+--- SUBFINDER ---
+subfinder -d [DOMINIO] -all
+
+===========================================================
+  CLOUD
+===========================================================
+# https://github.com/initstring/cloud_enum
+cloud_enum -k [PALABRA-CLAVE]
+
+===========================================================
+  SUPERFICIE DE ATAQUE
+===========================================================
+
+--- PASIVA ---
+shodan host [IP]
+shodan search "org:[EMPRESA]"
+
+--- ACTIVA ---
+nmap -sS -p- --min-rate 2000 [IP] -oA scan
+masscan -p1-65535 [RANGO] --rate 10000
+
+--- WEB SCREENSHOTS ---
+eyewitness -f [LISTA-APPS] --web --prepend-https
+gowitness file -f [LISTA-URLS]
+
+--- VULNS AUTOMATIZADO ---
+nuclei -u [URL] -t cves/
+
+===========================================================
+  RECONOCIMIENTO WI-FI
+===========================================================
+1. Sedes/CPDs/oficinas
+2. Pasivo  : wigle.net
+3. Activo  : aircrack-ng, airodump-ng
+4. Infra ataque
+
+Vectores:
+  - WEP  : captura + crack
+  - WPA/WPA2 : handshake
+  - WPA2-Enterprise : sin MDM/cert
+  - Open : segmentacion mala
+  - Fake AP + ing. social
+
+===========================================================
+  ING. SOCIAL - CORREOS
+===========================================================
+Estructuras tipicas:
+  [INICIAL][APELLIDO]@empresa.com
+  [NOMBRE]_[APELLIDO]@empresa.com
+  [NOMBRE].[APELLIDO]@empresa.com
+
+--- CROSSLINKED (LinkedIn via Google/Bing) ---
+python3 crosslinked.py -f '{first}.{last}@[DOMINIO]' [EMPRESA]
+
+Perfiles target (susceptibles):
+  - No tecnicos (RRHH, abogados)
+  - Empleados nuevos
+  - Sin cargo intermedio/directivo
+
+Vectores:
+  - Phishing (sin malware)
+  - Malware adjunto
+  - Malware USB
+  - Vishing
+
+===========================================================
+  RECONOCIMIENTO FISICO
+===========================================================
+Objetivos:
+  - Infectar equipo interno
+  - Implante hardware (RPi + 4G)
+  - Acceso CPD
+  - Robo dispositivos
+
+Info a obtener:
+  - Accesos al edificio
+  - Medidas seguridad
+  - Control de acceso
+  - Guardias
+
+Vectores:
+  - Puertas sin control
+  - RFID/NFC debil
+  - Ing. social empleados
+  - Acceso legitimo (entrevista, visita)

